@@ -260,3 +260,24 @@ I2 <- function(model, v, sims = 1500, phylo = FALSE){
   		Var <- dplyr::summarise(dplyr::group_by(tmp, num), var = stats::var(y))
   		return(as.numeric(Var$var))
   	}
+
+
+ # Functions for marginal estimates
+ 		
+ 	marginalize <- function(mod, vars){
+ 		modlist <- list()
+		for(i in 1:length(vars)){
+			modlist[[i]] <- effects::Effect(focal.predictors = vars[i], mod = mod, se = TRUE, confidence.level = 0.95)
+		}
+		return(modlist)
+	}
+
+	 # Takes a list, grab all estimates and then merges them together!
+	 margTable <- function(modlist){
+				as.data.frame(do.call(rbind, lapply(modlist, function(x) margEst(x))))
+
+			}
+	# Takes an "effects" object	
+	 margEst <- function(margEsts){
+				do.call(cbind, summary(margEsts)[c("effect", "lower", "upper")])
+			}

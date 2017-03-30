@@ -10,6 +10,7 @@
 	# load functions & libraries
 	source("./R/func.R")
 	library(lattice)
+	library(phytools)
 	library(nlme)
 	library(effects)
 	library(dplyr)
@@ -18,7 +19,7 @@
 	library(Hmisc)
 	library(rotl)
 	library(devtools)
-	install_github()
+
 
 
 	# load data
@@ -262,18 +263,25 @@
 
 		# Run some "full" models with the relevant variables discussed. Run in lme as we can then use the effects package
 
+		# Note the below model, however, assumes now that the residual variance is fixed! So we must remove the estimation of the observation-level variance, or ADD it into the lme fit to get the same results between metafor and lme. But also problems including nested random effects in lme: https://biostatmatt.com/archives/2718 & here: https://stat.ethz.ch/pipermail/r-help/2002-September/025067.html.
+
 		mod <- lme(lnCVR_es ~ category + background1 + mating + parenting, random = list(study = ~1), weights = varFixed(~VlnCVR), control=lmeControl(sigma = 1), method = "REML", data = data)
-
-		mod <- lmer(lnCVR_es ~ category + background1 + mating + parenting + (1|study), weights = VlnCVR, control=lmerControl(sigma = 1), method = "REML", data = data)
 		summary(mod)
 
-		mod <- lme(lnCVR_es ~ category + background1 + mating + parenting, random = pdBlocked(list(pdSymm(~study-1), pdSymm(~species-1))), weights = varFixed(~VlnCVR), control=lmeControl(sigma = 1), method = "ML", data = data)
+		# Try a little trick: https://biostatmatt.com/archives/2718
+		data2 <- data
+		data2$Dummy <- factor(1)
+		data2 <- groupedData(lnCVR_es~1 |Dummy, data2)
+		mod <- lme(lnCVR_es ~ category + background1 + mating + parenting, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~species-1))), weights = varFixed(~VlnCVR), control=lmeControl(sigma = 1), method = "REML", data = data2)
 		summary(mod)
+
+		modname <- rma.mv(lnCVR_es ~ category + background1 + mating + parenting, V = VlnCVR, random = list(~1|study, ~1|species), method = "REML", data = data)
+		modname
+
+		# Get marginal / unconditional estimates from the model.
+		marginal <- marginalize(mod = mod, vars = c("category", "background1", "mating", "parenting"))
+		margTable(marginal)
 		
-
-		margMeans <- Effect(focal.predictors = c("category"), mod = mod, se = TRUE, confidence.level = 0.95)
-		summary(margMeans)
-
 # 6. Figures
 #----------------------------------------------------------------------------#
 	# Do some plotting. Funnel plots
@@ -389,3 +397,11 @@
 
 
 
+
+# Trying with ASREML, but little success.
+	# Run in ASREML
+		m2 <- asreml(fixed = lnCVR_es ~ category + background1 + mating + parenting, random = ~study, weights = VlnCVR, family = asreml.gaussian(dispersion = 1), data = data)
+		coef(m2)$fixed
+		names(str(m2))
+
+		m2$vcoeff$fixed
