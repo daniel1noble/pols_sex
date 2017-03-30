@@ -10,11 +10,16 @@
 	# load functions & libraries
 	source("./R/func.R")
 	library(lattice)
+	library(nlme)
+	library(effects)
 	library(dplyr)
 	library(VIM) # Helps visualise missing data.
 	library(metafor)
 	library(Hmisc)
 	library(rotl)
+	library(devtools)
+	install_github()
+
 
 	# load data
 	data <- read.csv("./data/POLSsexdb_merged_20170315_recat.csv", stringsAsFactors = FALSE)
@@ -97,6 +102,12 @@
 	# Reverse effect size values if they are slow. This is really only important for lnRR which makes specific predictions about directionality along a fast-slow continuum.
 		data$lnRR_2 <- ifelse(data$direct == "slow", data$lnRR*(-1), data$lnRR)
 
+	# Convert to factors
+		data$category <- as.factor(data$category)
+		data$background1 <- as.factor(data$background1)
+		data$mating <- as.factor(data$mating)
+		data$parenting <- as.factor(data$parenting)
+
 # 2. Exploratory plotting
 #----------------------------------------------------------------------------#
 		
@@ -175,7 +186,7 @@
 # 4. Multi-level meta-analytic models (MLMA) - intercept only for heterogeneity 
 #----------------------------------------------------------------------------#
 	# Study and species level random effects are mostly confounded so study will probably capture most variation anyway, but worth attempting to estimate
-	data$obs <- 1:nrow(data)
+		data$obs <- 1:nrow(data)
 
 	# lnRR
 	   modRR_int <- rma.mv(lnRR_2 ~ 1, V = v.lnRR, random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
@@ -250,13 +261,6 @@
 		   predLabCVR <- predict(modCVR_category, newmods = rbind(c(0,0,0,0), c(1,0,0,0), c(0,1,0,0), c(0,0,1,0)), tau2.levels = c(0,0,0), level = 0.95)
 
 		# Run some "full" models with the relevant variables discussed. Run in lme as we can then use the effects package
-
-		library(nlme)
-		library(effects)
-		data$category <- as.factor(data$category)
-		data$background1 <- as.factor(data$background1)
-		data$mating <- as.factor(data$mating)
-		data$parenting <- as.factor(data$parenting)
 
 		mod <- lme(lnCVR_es ~ category + background1 + mating + parenting, random = list(study = ~1), weights = varFixed(~VlnCVR), control=lmeControl(sigma = 1), method = "REML", data = data)
 
@@ -365,129 +369,23 @@
 		mod_avg <- model.avg(test, subset = cumsum(weight) <= 0.95)
 		summary(mod_avg)
 
-	# Should be 2^9 = 512 models, only considering the main effects. Only needed initially.
-	mods_lnRR <- glmulti(lnRR_2 ~ category + background1 + thermy + climate_sp + SSD + ageclass + mating + parenting + breeding, vi = data$v.lnRR, random = list(~1|study), R = list(species = phylo_cor), data = data, level = 1, fitfunction = rma.mv_glmulti, crit = "aicc", confsetsize=1000)
-	saveRDS(mods_lnRR, "./output/mod_avg_res/mods_lnRR")
-
-	# Extract model-averaged table, such that all models within 3 AICc units of top model
-		   mods_lnRR <- readRDS("./output/mod_avg_res/mods_lnRR")
-		mod_tab_lnRR <- weightable(mods_lnRR)
-		mod_tab_lnRR <- mod_tab_lnRR[mod_tab_lnRR$aicc <= min(mod_tab_lnRR$aicc) + 3,]
-		mod_tab_lnRR$deltAICc <- mod_tab_lnRR$aicc - min(mod_tab_lnRR$aicc)
-
-		#Re-calc. weights with model set
-		mod_tab_lnRR$weights <- (exp(-0.5*mod_tab_lnRR$deltAICc)) / (sum(exp(-0.5*mod_tab_lnRR$deltAICc)))
-		# Problems model averaging and accounting for the random effects, so will do this post full subset model selection
-		coefTabRR_modAvg <-c()
-		for(i in 1:nrow(mod_tab_lnRR)){
-			form <- formula(as.character(mod_tab_lnRR[i,"model"]))
-			modname <- rma.mv(form, V = v.lnRR, random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
-			extraction <- extract(modname)
-			aicc <- AICc(modname)
-			coefTabRR_modAvg <- rbind(coefTabRR_modAvg, cbind(extraction, aicc, i))
-		}
-
-		coefTabRR_modAvg$deltAICc <- coefTabRR_modAvg$aicc - min(coefTabRR_modAvg$aicc)
-		coefTabRR_modAvg <- arrange(coefTabRR_modAvg, deltAICc)
-
-		parameters <- unique(rownames(coefTabRR_modAvg))
-		
-	# Should be 2^9 = 512 models, only considering the main effects. Only needed once and then can be re-loaded same as lnRR
-	# mods_lnCVR <- glmulti(lnCVR_es ~ category + background1 + thermy + climate_sp + SSD + ageclass +mating + parenting + breeding, vi = data$VlnCVR, random = list(~1|study), data = data, level = 1, fitfunction = rma.mv_glmulti, crit = "aicc", confsetsize=1000)
-	# saveRDS(mods_lnCVR, "./output/mod_avg_res/mods_lnCVR")
-
-	# Extract model-averaged table, such that all models within 3 AICc units of top model
-		   mods_lnCVR <- readRDS("./output/mod_avg_res/mods_lnCVR")
-		mod_tab_lnCVR <- weightable(mods_lnCVR)
-		mod_tab_lnCVR <- mod_tab_lnCVR[mod_tab_lnCVR$aicc <= min(mod_tab_lnCVR$aicc) + 3,]
-		mod_tab_lnCVR$deltAICc <- mod_tab_lnCVR$aicc - min(mod_tab_lnCVR$aicc)
-
-		#Re-calc. weights with model set
-		mod_tab_lnCVR$weights <- (exp(-0.5*mod_tab_lnCVR$deltAICc)) / (sum(exp(-0.5*mod_tab_lnCVR$deltAICc)))
-
-		coefTabCVR_modAvg <- TopModelEst(mod_tab_lnCVR)
-		# Mod averaging
-		mod.avgCVR <- mod_avg(coefTabCVR_modAvg)
-
-
-# 9. Marginal estimates / unconditional means for the groups
+# 9. Marginal estimates / unconditional means for the groups. 
 #----------------------------------------------
+	# Modify functions from "effects" package
 
-# Modify functions from "effects" package
+	x1 <- rbinom(100, 1, 0.5)
+	x2 <- rbinom(100, 1, 0.5)
+	id <- rep(rnorm(10, 0, 1), each = 10)
+	e <- rnorm(100,0,1)
 
-x1 <- rbinom(100, 1, 0.5)
-x2 <- rbinom(100, 1, 0.5)
-id <- rep(rnorm(10, 0, 1), each = 10)
-e <- rnorm(100,0,1)
-
-y <- 2 + 0.5*x1 + 1.5*x2 + id + e
-
-
-data <- data.frame(y, x1, x2, id = as.factor(id))
-library(lme4)
-
-mod <- lme(y ~ x1 + x2, random= ~ 1|id, data = data)
-summary(mod)
+	y <- 2 + 0.5*x1 + 1.5*x2 + id + e
 
 
+	data <- data.frame(y, x1, x2, id = as.factor(id))
+	library(lme4)
 
-################# Extra Code that is no longer needed ################
-
-	# Explore missing data and exclude data with no SD. Not relevant anymore. No missing data.
-		#aggr(data2, cex.axis = 0.50)
-		#marginplot(log(data2[,c("Mean_M", "SD_M")]))
-		#vars <- c("Mean_M", "SD_M", "M_n")
-		#males
-		#marginmatrix(log(data2[,vars]),  col = c("blue", "red", "red4",
-	       "orange", "orange4"))
-		#females
-		#vars <- c("Mean_F", "SD_F", "F_n")
-		#marginmatrix(log(data2[,vars]),  col = c("blue", "red", "red4",
-	       "orange", "orange4"))
+	mod <- lme(y ~ x1 + x2, random= ~ 1|id, data = data)
+	summary(mod)
 
 
-	#Hmisc::subplot(
-			#plot(1 / sqrt(v.lnRR) ~ lnRR, ylab = "", xlab = "", ylim = c(0,300), data = data, cex.lab = 1.5),  x = -1.5, y = 500, size = c(1, 1)
-			#)
 
-	# Check out odd ball points; checked a few and are correct.
-	 #text(data$study, y = log(data$Mean_M)+0.30, x =  log(data$SD_M), cex = 0.5)
-
-	 #modRR_thermy <- rma.mv(lnRR ~ thermy, V = v.lnRR, random = list(~1|study, ~1|species), data = data)
-	#modRR_category <- rma.mv(lnRR_2 ~ 1 + category + background1 + thermy + climate_sp + growth, V = v.lnRR, random = list(~1|study, ~1|species), data = data)
-
-	# Do wild and lab based studies differ in how the traits between sexes are impacted?
-	#modRR_category <- rma.mv(lnRR_2 ~ -1+ category , V = v.lnRR, random = list(~1|study), data = data)
-
-	#data$TraitBackground <- interaction(data$category, data$background1)
-	#modRR_category <- rma.mv(lnRR_2 ~ -1+TraitBackground, V = v.lnRR, random = list(~1|study, ~1|species), data = data)
-	
-	# Subset analysis
-	#modRR_category_wild <- rma.mv(lnRR_2 ~ -1 + category, V = v.lnRR, random = list(~1|study, ~1|species), data = subset(data, background1 == "wild"))
-	#modRR_category_lab <- rma.mv(lnRR_2 ~ -1 + category, V = v.lnRR, random = list(~1|study, ~1|species), data = subset(data, background1 == "lab"))
-	
-	#modRR_taxon <- rma.mv(lnRR ~ relevel(as.factor(taxon), ref = "mammal"), V = v.lnRR, random = list(~1|study, ~1|species), data = data)
-	#modRR_climate <- rma.mv(lnRR ~ climate_sp, V = v.lnRR, random = list(~1|study, ~1|species), data = data)
-
-	#modCVR_thermy <- rma.mv(lnCVR_es ~ thermy, V = VlnCVR , random = list(~1|study, ~1|species), data = data)
-	#modCVR_category <- rma.mv(lnCVR_es ~ category, V = VlnCVR , random = list(~1|study, ~1|species), data = data)
-	#modCVR_taxon <- rma.mv(lnCVR_es ~ -1+ taxon, V = VlnCVR , random = list(~1|study, ~1|species), data = data)
-
-
-	modRR_category <- rma.mv(lnRR_2 ~ -1+ category , V = v.lnRR, random = list(~1|study), data = data)
-
-	modCVR_category <- rma.mv(lnCVR_es ~ -1 + category, V = VlnCVR , random = list(~1|study, ~1|species), data = data)
-
-	#modVR_thermy <- rma.mv(lnVR ~ thermy, V = var.lnVR , random = list(~1|study, ~1|species), data = data)
-	#modVR_category <- rma.mv(lnVR ~ category, V = var.lnVR , random = list(~1|study, ~1|species), data = data)
-	#modVR_taxon <- rma.mv(lnVR ~ taxon, V = var.lnVR , random = list(~1|study, ~1|species), data = data)
-
-
-	   # Compare with MCMCglmm. Looks fine assuming that a residual variance is correctly estimates. Otherwise, point estimate is affected. Presumably because study variance, which factors into weighting is impacted.
-	   #modRR_intMCMC <- MCMCglmm(lnRR_2~1, mev = data$v.lnRR, random=~study + species, ginverse = list(species = Ainv), family = "gaussian", data = data)
-
-    # Compare with MCMCglmm. Looks fine assuming that a residual variance is correctly estimates. Otherwise, point estimate is affected. Presumably because study variance, which factors into weighting is impacted.
-	  # modCVR_intMCMC <- MCMCglmm(lnCVR_es~1, mev = data$VlnCVR, random=~study + species, ginverse = list(species = Ainv), family = "gaussian", data = data)
-
-	    # Compare with MCMCglmm. Looks fine assuming that a residual variance is correctly estimates. Otherwise, point estimate is affected. Presumably because study variance, which factors into weighting is impacted.
-	   #modVR_intMCMC <- MCMCglmm(lnVR~1, mev = data$var.lnVR, random=~study + species, ginverse = list(species = Ainv), family = "gaussian", data = data)
