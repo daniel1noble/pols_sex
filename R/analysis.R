@@ -281,7 +281,7 @@
 		# Get marginal / unconditional estimates from the model.
 		marginal <- marginalize(mod = mod, vars = c("category", "background1", "mating", "parenting"))
 		margTable(marginal)
-		
+
 # 6. Figures
 #----------------------------------------------------------------------------#
 	# Do some plotting. Funnel plots
@@ -387,13 +387,21 @@
 	e <- rnorm(100,0,1)
 
 	y <- 2 + 0.5*x1 + 1.5*x2 + id + e
-
+	
+	summary(mod)
+	mod2 <- lme(y ~ x1, random= ~ 1|id, method = "ML", data = data)
+	summary(mod2)
 
 	data <- data.frame(y, x1, x2, id = as.factor(id))
 	library(lme4)
 
-	mod <- lme(y ~ x1 + x2, random= ~ 1|id, data = data)
+	mod <- lme(y ~ x1 + x2, random= ~ 1|id, method = "ML", data = data)
 	summary(mod)
+	mod2 <- lme(y ~ x1, random= ~ 1|id, method = "ML", data = data)
+	summary(mod2)
+
+	drop1(mod, test = "Chisq")
+
 
 
 
