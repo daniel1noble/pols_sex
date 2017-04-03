@@ -76,24 +76,6 @@
 		 nSpp <- length(spp)
 		taxon <- unique(data$taxon)
 
-	# How N varies across categories
-		table(data$taxon) # Small sample size in some categories of taxon. 
-		table(data$thermy) # Good sample sizes in each group
-		table(data$category) #Decent N in each group.
-		table(data$SSD)  # Good N across levels
-		table(data$mating) #unknown is pretty useless, but others are OK.
-		table(data$breeding) # Most ok. But obviously unknown is useless.
-		table(data$parenting) # good
-		table(data$climate_sp) # Mostly ok.
-		table(data$background1) # I think domestic and lab are equivalent and semi-wild and wild. Could merge
-
-	# I don't think there is enough data to explore interactions, but just have a look at a few possible ones.
-		table(data$mating, data$category) # Nope. Not enough data in many levels
-		interaction.plot(data$mating, data$category, data$lnRR)
-
-		table(data$SSD, data$category) # Nope. Not enough data in many levels
-		interaction.plot(data$SSD, data$category, data$lnRR)
-
 	# Check directions
 		direct <- gsub("high values =*", "", data$direction)
 		direct <- gsub(" ", "", direct)
@@ -160,29 +142,6 @@
 	phylo_cor <- vcv(phylo_BL, corr = TRUE)
 	names <- gsub("_", " ", rownames(phylo_cor))
 	rownames(phylo_cor) <- colnames(phylo_cor) <- names
-	
-	# Or inverse covariance matrix, which will be used for MCMCglmm, Makes sure names match with species.
-	Ainv <- MCMCglmm::inverseA(phylo_BL, nodes = "ALL", scale = TRUE)$Ainv
-	names <- gsub("_", " ", rownames(Ainv))
-	rownames(Ainv) <- colnames(Ainv) <- names
-
-	# Create covariance matrix between dependent effect sizes.
-	data$depend<-0
-
-    studies<-unique(data$study)
-    for(i in 1:length(studies)){
-    	locations<-which(data$study == studies[i])
-    	data$depend[locations]<-seq(1, length(locations), 1)
-    }
-
-    data$depend<-paste(data$study, data$depend, sep="_")
-
-    # This will grab all the rows that have values above zero, then paste the study from these rows with the actual value from dependence. 
-    data$depend[which(data$dependence > 0)]<-paste(data$study[which(data$dependence > 0)], data$dependence[which(data$dependence > 0)], sep="_")
-
-    dependency<-data$depend
-    shared_cov <- which(dependency%in%dependency[duplicated(dependency)]==TRUE)
-    combinations <- do.call("rbind", tapply(shared_cov, data[shared_cov,"depend"], function(x) t(combn(x,2))))
 
 # 4. Multi-level meta-analytic models (MLMA) - intercept only for heterogeneity 
 #----------------------------------------------------------------------------#
@@ -205,6 +164,7 @@
 # 5. Multi-level meta-regression models
 #----------------------------------------------------------------------------#
 	# First get N for all predictors
+	vars <- c("category" , "background1" , "mating" , "parenting")
 
 		N <- c()
 		for(i in 1:length(vars)){
@@ -214,7 +174,6 @@
 	
 	# lnRR
 		# Fun univariate models for each predictor of interest. Get the mean in each of these groups.
-		vars <- c("category" , "background1" , "thermy" , "climate_sp" , "SSD" , "ageclass" , "mating" , "parenting" , "breeding")
 
 		coefTabRR <- c()
 		for(i in 1:length(vars)){
@@ -228,18 +187,25 @@
 		coefTabRR$N <- N
 		coefTabRR$obs <- 1:nrow(coefTabRR)
 
-		data$SSD_ord <- ifelse(data$SSD == "females larger", -1, ifelse(data$SSD == "No difference", 0, 1))
+		# Run some "full" models with the relevant variables discussed. Run in lme as we can then use the effects package
 
-		modname2 <- rma.mv(lnRR_2 ~ -1 + category*SSD_ord + background1 + parenting, V = v.lnRR, random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
+		# Note the below model, however, assumes now that the residual variance is fixed! So we must remove the estimation of the observation-level variance, or ADD it into the lme fit to get the same results between metafor and lme. But also problems including nested random effects in lme: https://biostatmatt.com/archives/2718 & here: https://stat.ethz.ch/pipermail/r-help/2002-September/025067.html.
 
-	   # compute mean and CIs in each trait category in the wild and lab.
-		   predRR <- predict(modRR_category, newmods = rbind(c(0,0,0), c(1,0,0), c(0,1,0), c(0,0,1)), tau2.levels = c(0,0,0), level = 0.95)
-		   predWildRR <- predict(modRR_category, newmods = rbind(c(0,0,0,1), c(1,0,0,1), c(0,1,0,1), c(0,0,1,1)), tau2.levels = c(0,0,0), level = 0.95)
-		   predLabRR <- predict(modRR_category, newmods = rbind(c(0,0,0,0), c(1,0,0,0), c(0,1,0,0), c(0,0,1,0)), tau2.levels = c(0,0,0), level = 0.95)
-	unique(data$parenting)
-	   # Back transform means account for Jensen's inequality. Use total variance (not including sampling)
-		    wildTransRR <- 1 - exp(predWildRR$pred + 0.5*0.0683)
-		    LabTransRR <- 1 - exp(predLabRR$pred + 0.5*0.0683)
+		# Try a little trick: https://biostatmatt.com/archives/2718
+		data2 <- data
+		data2$Dummy <- factor(1)
+		data2 <- groupedData(lnRR_2~1 |Dummy, data2)
+		modRR <- lme(lnRR_2 ~ category + background1 + mating + parenting, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~species-1))), weights = varFixed(~v.lnRR), control=lmeControl(sigma = 1), method = "REML", data = data2)
+		summary(modRR)
+
+		modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + parenting, V = v.lnRR, random = list(~1|study, ~1|species), method = "REML", data = data)
+		modnameRR
+
+		# Get marginal / unconditional mean estimates from the model.
+		marginalRR <- marginalize(mod = modRR, vars = c("category", "background1", "mating", "parenting")) 
+		margTableRR <- margTable(marginalRR)
+		margTableRR$N <- N
+		margTableRR$obs <- 1:nrow(margTableRR)
 
 	# lnCVR
 		vars <- c("category" , "background1" , "thermy" , "climate_sp" , "SSD" , "ageclass" , "mating" , "parenting" , "breeding")
@@ -256,31 +222,21 @@
 		coefTabCVR$N <- N
 		coefTabCVR$obs <- 1:nrow(coefTabCVR)
 
-	   # compute mean and CIs in each trait category in the wild and lab.
-		   predCVR <- predict(modCVR_category, newmods = rbind(c(0,0,0), c(1,0,0), c(0,1,0), c(0,0,1)), tau2.levels = c(0,0,0), level = 0.95)
-		   predWildCVR <- predict(modCVR_category, newmods = rbind(c(0,0,0,1), c(1,0,0,1), c(0,1,0,1), c(0,0,1,1)), tau2.levels = c(0,0,0), level = 
-		   predLabCVR <- predict(modCVR_category, newmods = rbind(c(0,0,0,0), c(1,0,0,0), c(0,1,0,0), c(0,0,1,0)), tau2.levels = c(0,0,0), level = 0.95)
-
-		# Run some "full" models with the relevant variables discussed. Run in lme as we can then use the effects package
-
-		# Note the below model, however, assumes now that the residual variance is fixed! So we must remove the estimation of the observation-level variance, or ADD it into the lme fit to get the same results between metafor and lme. But also problems including nested random effects in lme: https://biostatmatt.com/archives/2718 & here: https://stat.ethz.ch/pipermail/r-help/2002-September/025067.html.
-
-		mod <- lme(lnCVR_es ~ category + background1 + mating + parenting, random = list(study = ~1), weights = varFixed(~VlnCVR), control=lmeControl(sigma = 1), method = "REML", data = data)
-		summary(mod)
-
 		# Try a little trick: https://biostatmatt.com/archives/2718
 		data2 <- data
 		data2$Dummy <- factor(1)
 		data2 <- groupedData(lnCVR_es~1 |Dummy, data2)
-		mod <- lme(lnCVR_es ~ category + background1 + mating + parenting, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~species-1))), weights = varFixed(~VlnCVR), control=lmeControl(sigma = 1), method = "REML", data = data2)
-		summary(mod)
+		modCVR <- lme(lnCVR_es ~ category + background1 + mating + parenting, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~species-1))), weights = varFixed(~VlnCVR), control=lmeControl(sigma = 1), method = "REML", data = data2)
+		summary(modCVR)
 
-		modname <- rma.mv(lnCVR_es ~ category + background1 + mating + parenting, V = VlnCVR, random = list(~1|study, ~1|species), method = "REML", data = data)
-		modname
+		modnameCVR <- rma.mv(lnCVR_es ~ category + background1 + mating + parenting, V = VlnCVR, random = list(~1|study, ~1|species), method = "REML", data = data)
+		modnameCVR
 
 		# Get marginal / unconditional estimates from the model.
-		marginal <- marginalize(mod = mod, vars = c("category", "background1", "mating", "parenting"))
-		margTable(marginal)
+		marginalCVR <- marginalize(mod = modCVR, vars = c("category", "background1", "mating", "parenting"))
+		margTableCVR <- margTable(marginalCVR)
+		margTableCVR$N <- N
+		margTableCVR$obs <- 1:nrow(margTableCVR)
 
 # 6. Figures
 #----------------------------------------------------------------------------#
@@ -306,36 +262,38 @@
 	pdf(width = 16.708333, height = 8.791667, file = "./output/figures/Figure2.pdf")
 			par(mfrow = c(1,2),  bty = "n", mar = c(5,10,2,1))
 
-			Labels <- c("Behaviour", "Development","Life History", "Physiology", "Lab", "Wild", "Ectotherm", "Endotherm", "Arid", "Artificial", "Global", "Temperate", "Tropical", "Females larger", "Males larger", "No difference", "Adults", "Juveniles", "Mixed", "Unknown", "Polygyny", "Promiscuity", "Monogamy", "Unknown", "Both", "Female", "None", "Iteroparous", "Semelparous")
+			labels <- tolower(rownames(coefTabRR <- margTableRR))
+			yRef <- c(1:4, 7,8, 11:14, 17:19)
+			#Labels <- c("Behaviour", "Development","Life History", "Physiology", "Lab", "Wild", "Ectotherm", "Endotherm", "Arid", "Artificial", "Global", "Temperate", "Tropical", "Females larger", "Males larger", "No difference", "Adults", "Juveniles", "Mixed", "Unknown", "Polygyny", "Promiscuity", "Monogamy", "Unknown", "Both", "Female", "None", "Iteroparous", "Semelparous")
 			#lnRR
-			plot(obs~Est.,  type = "n", xlim = c(-0.5, 0.5), ylim = c(0, 46), xlab = "lnRR", ylab = "", data = coefTabRR, yaxt='n', cex.lab = 1.5)
+			plot(obs~effect,  type = "n", xlim = c(-0.6, 0.6), ylim = c(0, max(yRef)+2), xlab = "lnRR", ylab = "", data = coefTabRR, yaxt='n', cex.lab = 1.5)
 			abline(v = 0, lty = 2)
-			yRef <- c(1:4, 7,8, 11,12, 15:19, 22:24, 27:30, 33:36, 39:41, 44:45)
 			
-			points(yRef~coefTabRR[-30, "Est."], pch = 16)
-			arrows(x0=coefTabRR[-30,"Est."] , y0= yRef, x1= coefTabRR[-30,"ci.lb"] , y1 = yRef, length = 0, angle = 90)
-			arrows(x0=coefTabRR[-30,"Est."] , y0= yRef, x1= coefTabRR[-30,"ci.up"] , y1 = yRef, length = 0, angle = 90)
-			mtext(side  = 2, Labels, at = yRef, las = 1)
-			mtext(side  = 2, expression(bold("A)")), at = 48, line = 6, las = 1, cex = 1.5, padj = -0.50)
-			labRef <- c(5,9,13,20,25,31,37,42,46)
-			titles <- c("Trait Type", "Lab vs. Wild", "Thermy", "Climate zone", "SSD", "Age class","Mating Syst.", "Parental care", "Growth")
+			points(yRef~coefTabRR[-30, "effect"], pch = 16) #-30 from other table
+			arrows(x0=coefTabRR[-30,"effect"] , y0= yRef, x1= coefTabRR[-30,"lower"] , y1 = yRef, length = 0, angle = 90)
+			arrows(x0=coefTabRR[-30,"effect"] , y0= yRef, x1= coefTabRR[-30,"upper"] , y1 = yRef, length = 0, angle = 90)
+			mtext(side  = 2, labels, at = yRef, las = 1)
+			mtext(side  = 2, expression(bold("A)")), at = max(yRef)+2, line = 6, las = 1, cex = 1.5, padj = -1.0)
+			labRef <- c(5,9,15,20) #labRef <- c(5,9,13,20,25,31,37,42,46)
+			titles <- c("Trait Type", "Lab vs. Wild", "Mating Syst.", "Parental care")
 			mtext(side  = 2, titles, font = 2, at = labRef, las = 1, cex = 1)
-			text("Males 'faster'", x = -0.3, y = 47, cex = 1)
-			text("Females 'faster'", x = +0.3, y = 47, cex = 1)
+			text("Males 'faster'", x = -0.3, y = max(yRef)+2, cex = 1)
+			text("Females 'faster'", x = +0.3, y = max(yRef)+2, cex = 1)
 
 			#lnCVR
-			par(mar = c(5,1,2,1))
-			plot(obs~Est.,  type = "n", xlim = c(-0.5, 0.5), ylim = c(0, 46), xlab = "lnCVR", ylab = "", data = coefTabCVR, yaxt='n', cex.lab = 1.5)
+			coefTabCVR <- margTableCVR
+			par(mar = c(5,1,2,10))
+			plot(obs~effect,  type = "n", xlim = c(-0.6, 0.6), ylim = c(0, max(yRef)+2), xlab = "lnCVR", ylab = "", data = coefTabCVR, yaxt='n', cex.lab = 1.5)
 			abline(v = 0, lty = 2)
 						
-			points(yRef~coefTabCVR[-30, "Est."], pch = 16)
-			arrows(x0=coefTabCVR[-30,"Est."] , y0= yRef, x1= coefTabCVR[-30,"ci.lb"] , y1 = yRef, length = 0, angle = 90)
-			arrows(x0=coefTabCVR[-30,"Est."] , y0= yRef, x1= coefTabCVR[-30,"ci.up"] , y1 = yRef, length = 0, angle = 90)
+			points(yRef~coefTabCVR[-30, "effect"], pch = 16)
+			arrows(x0=coefTabCVR[-30,"effect"] , y0= yRef, x1= coefTabCVR[-30,"lower"] , y1 = yRef, length = 0, angle = 90)
+			arrows(x0=coefTabCVR[-30,"effect"] , y0= yRef, x1= coefTabCVR[-30,"upper"] , y1 = yRef, length = 0, angle = 90)
 			mtext(side  = 2, coefTabCVR$N, at = yRef, las = 1, adj = .5, line = 1)
-			mtext(side = 2, expression(bold("N")), at = 47, las = 1, line = 0.5, cex = 1.2)
-			mtext(side  = 2, expression(bold("B)")), at = 48, line = 1, las = 1, cex = 1.5, padj = -0.50)			
-			text("Males high V", x = -0.3, y = 47, cex = 1)
-			text("Females high V", x = +0.3, y = 47, cex = 1)
+			mtext(side = 2, expression(bold("N")), at = max(yRef)+2, las = 1, line = 0.5, cex = 1.2)
+			mtext(side  = 2, expression(bold("B)")), at = max(yRef)+2, line = 1, las = 1, cex = 1.5, padj = -1.0)			
+			text("Males high V", x = -0.3, y = max(yRef)+2, cex = 1)
+			text("Females high V", x = +0.3, y = max(yRef)+2, cex = 1)
 	dev.off()
 
 # 7. Publication Bias
