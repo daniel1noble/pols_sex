@@ -1,29 +1,27 @@
 #----------------------------------------------------------------------------#
 # Meta-Analysis of sex differences in behaviour, physiology to test POLs
 # Authors: Maja Tarka, Anja Günther, Petri Niemela, Shinichi Nakagawa and Daniel Noble
-# Thu Jan 26 11:56:30 2017
+# 2017-04-03 15:53:29 AEST
 #----------------------------------------------------------------------------#
 
 	# clear working space
-	rm(list=ls())
+		rm(list=ls())
 
 	# load functions & libraries
-	source("./R/func.R")
-	library(lattice)
-	library(phytools)
-	library(nlme)
-	library(effects)
-	library(dplyr)
-	library(VIM) # Helps visualise missing data.
-	library(metafor)
-	library(Hmisc)
-	library(rotl)
-	library(devtools)
-
-
+		source("./R/func.R")
+		library(lattice)
+		library(phytools)
+		library(nlme)
+		library(effects)
+		library(dplyr)
+		library(VIM) # Helps visualise missing data.
+		library(metafor)
+		library(Hmisc)
+		library(rotl)
+		library(devtools)
 
 	# load data
-	data <- read.csv("./data/POLSsexdb_merged_20170315_recat.csv", stringsAsFactors = FALSE)
+		data <- read.csv("./data/POLSsexdb_merged_20170315_recat.csv", stringsAsFactors = FALSE)
 
 # 1. Data Exploration & Processing
 #----------------------------------------------------------------------------#
@@ -94,7 +92,7 @@
 # 2. Exploratory plotting
 #----------------------------------------------------------------------------#
 		
-		# Box plot function to plot the various variables quickly.
+		# Box plot function to plot the various variables quickly. Just change parameters
 		#Parameters
 		y <- "lnRR_2"
 		x <- c("Trait type", "SSD", "Thermy", "Growth Strategy", "Mating system", "Parental Care", "Climate Zone", "Breeding style")
@@ -119,16 +117,17 @@
 #----------------------------------------------------------------------------#
 	# Phylogenetic correlation matrix
 	# List of species
-	spp <- gsub(" ", "_", spp)
-	write.csv(spp, "./output/sppList.csv")
+	#spp <- gsub(" ", "_", spp)
+	#write.csv(spp, "./output/sppList.csv")
 
 	# Pull species from the OTL database
-	tree <- tnrs_match_names(names = spp)
+	#tree <- tnrs_match_names(names = spp)
 
 	#Cerate a tree based on IDs found. Problem here were "4124117" is just not found. Function does not work when included. This maybe dude to taxonomy change. Synonym of Egernia whitii is Liopholis whitti. Try changing this. 
-	tl <- tol_induced_subtree(ott_ids=tree$ott_id) 
-	write.tree(tl, "./output/tree")
+	#tl <- tol_induced_subtree(ott_ids=tree$ott_id) 
+	#write.tree(tl, "./output/tree")
 
+	#Note that above code is only needed once to grab taxa and generate the tree. Now we can just import the tree file. 
 	#Remove ott labels on end to make sure to matches species in dataset
 	phylo <- read.tree("./output/tree")
 	phylo$tip.label <- gsub("_ott.+", "", phylo$tip.label)
@@ -151,20 +150,19 @@
 	# lnRR
 	   modRR_int <- rma.mv(lnRR_2 ~ 1, V = v.lnRR, random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
 
-	   #Generate heterogeneity measures and CI's
+	   #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
 	   I2(modRR_int, v = data$v.lnRR, phylo = "species")
-
 
 	# lnCVR
 	   modCVR_int <- rma.mv(lnCVR_es ~ 1, V = VlnCVR , random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
 
-	   #Generate heterogeneity measures and CI's
+	   #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
 	   I2(modCVR_int, v = data$VlnCVR, phylo = "species")
 
 # 5. Multi-level meta-regression models
 #----------------------------------------------------------------------------#
 	# First get N for all predictors
-	vars <- c("category" , "background1" , "mating" , "parenting")
+		vars <- c("category" , "background1" , "mating" , "parenting")
 
 		N <- c()
 		for(i in 1:length(vars)){
@@ -187,26 +185,6 @@
 		coefTabRR$N <- N
 		coefTabRR$obs <- 1:nrow(coefTabRR)
 
-		# Run some "full" models with the relevant variables discussed. Run in lme as we can then use the effects package
-
-		# Note the below model, however, assumes now that the residual variance is fixed! So we must remove the estimation of the observation-level variance, or ADD it into the lme fit to get the same results between metafor and lme. But also problems including nested random effects in lme: https://biostatmatt.com/archives/2718 & here: https://stat.ethz.ch/pipermail/r-help/2002-September/025067.html.
-
-		# Try a little trick: https://biostatmatt.com/archives/2718
-		data2 <- data
-		data2$Dummy <- factor(1)
-		data2 <- groupedData(lnRR_2~1 |Dummy, data2)
-		modRR <- lme(lnRR_2 ~ category + background1 + mating + parenting, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~species-1))), weights = varFixed(~v.lnRR), control=lmeControl(sigma = 1), method = "REML", data = data2)
-		summary(modRR)
-
-		modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + parenting, V = v.lnRR, random = list(~1|study, ~1|species), method = "REML", data = data)
-		modnameRR
-
-		# Get marginal / unconditional mean estimates from the model.
-		marginalRR <- marginalize(mod = modRR, vars = c("category", "background1", "mating", "parenting")) 
-		margTableRR <- margTable(marginalRR)
-		margTableRR$N <- N
-		margTableRR$obs <- 1:nrow(margTableRR)
-
 	# lnCVR
 		vars <- c("category" , "background1" , "thermy" , "climate_sp" , "SSD" , "ageclass" , "mating" , "parenting" , "breeding")
 
@@ -222,15 +200,47 @@
 		coefTabCVR$N <- N
 		coefTabCVR$obs <- 1:nrow(coefTabCVR)
 
-		# Try a little trick: https://biostatmatt.com/archives/2718
+		
+# 6. Marginal estimates / unconditional means for the groups. 
+#----------------------------------------------
+	# Run some "full" models with the relevant variables discussed. Run in lme as we can then use the effects package
+
+	# Note the below model, however, assumes now that the residual variance is fixed! So we must remove the estimation of the observation-level variance, or ADD it into the lme fit to get the same results between metafor and lme. But also problems including nested random effects in lme: https://biostatmatt.com/archives/2718 & here: https://stat.ethz.ch/pipermail/r-help/2002-September/025067.html.
+
+	#lnRR
+		modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + parenting, V = v.lnRR, random = list(~1|study, ~1|species), R = list(species = phylo_cor), method = "ML", data = data)
+		
+		modnameRR2 <- rma.mv(lnRR_2 ~ category + background1 + mating + parenting, V = v.lnRR, random = list(~1|study, ~1|species),  method = "ML", data = data)
+		
+		# The AICc difference between models is fairly negligible. Actually, we could probably simply and just estimate a between species random effect with out the correlation matrix. This is 
+		AICc(modnameRR2) - AICc(modnameRR) 
+
+		# Re-fit in lme. Try a little trick: https://biostatmatt.com/archives/2718
+		data2 <- data
+		data2$Dummy <- factor(1)
+		data2 <- groupedData(lnRR_2~1 |Dummy, data2)
+		modRR <- lme(lnRR_2 ~ category + background1 + mating + parenting, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~species-1))), weights = varFixed(~v.lnRR), control=lmeControl(sigma = 1), method = "REML", data = data2)
+		summary(modRR)
+
+		modRR_phy <- lme(lnRR_2 ~ category + background1 + mating + parenting, random = pdBlocked(list(pdIdent(~study-1), pdMat(value = phylo_cor))), weights = varFixed(~v.lnRR), control=lmeControl(sigma = 1), method = "REML", data = data2)
+		summary(modRR_phy)
+
+		# Get marginal / unconditional mean estimates from the model.
+		marginalRR <- marginalize(mod = modRR, vars = c("category", "background1", "mating", "parenting")) 
+		margTableRR <- margTable(marginalRR)
+		margTableRR$N <- N
+		margTableRR$obs <- 1:nrow(margTableRR)
+
+	#lnCVR
+		modnameCVR <- rma.mv(lnCVR_es ~ category + background1 + mating + parenting, V = VlnCVR, random = list(~1|study, ~1|species), method = "REML", data = data)
+		modnameCVR
+
+		# Re-fit in lme. Try a little trick: https://biostatmatt.com/archives/2718
 		data2 <- data
 		data2$Dummy <- factor(1)
 		data2 <- groupedData(lnCVR_es~1 |Dummy, data2)
 		modCVR <- lme(lnCVR_es ~ category + background1 + mating + parenting, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~species-1))), weights = varFixed(~VlnCVR), control=lmeControl(sigma = 1), method = "REML", data = data2)
 		summary(modCVR)
-
-		modnameCVR <- rma.mv(lnCVR_es ~ category + background1 + mating + parenting, V = VlnCVR, random = list(~1|study, ~1|species), method = "REML", data = data)
-		modnameCVR
 
 		# Get marginal / unconditional estimates from the model.
 		marginalCVR <- marginalize(mod = modCVR, vars = c("category", "background1", "mating", "parenting"))
@@ -238,63 +248,6 @@
 		margTableCVR$N <- N
 		margTableCVR$obs <- 1:nrow(margTableCVR)
 
-# 6. Figures
-#----------------------------------------------------------------------------#
-	# Do some plotting. Funnel plots
-	pdf(height = 4.519824, width = 9.938326, file = "./output/figures/funnels.pdf")
-			par(mfrow = c(1,2), mar = c(4, 5, 1, 1))
-			
-			#lnCVR
-	   		funnel(modRR_int, yaxis = "seinv", ylab = "Precision (1/SE)",xlab = "lnRR", pch = 21, digits = 0, las = 1, level = c(95, 99), back = "gray90")
-			abline(v = 0, col = "red")
-			mtext("A)", adj = -0.25, padj = 0.5)	
-		
-			#lnCVR
-			funnel(modCVR_int, yaxis = "seinv", ylab = "", xlab = "lnCVR", pch = 21, digits = 0, las = 1, level = c(95, 99), back = "gray90")
-			abline(v = 0, col = "red")
-			mtext("B)", adj = -0.25, padj = 0.5)	
-		dev.off()		
-	
-		pdf(height = 7, width = 7, file = "./output/figures/phylogeny.pdf")
-		  	plot(phylo, cex = 0.85)
-		dev.off()
-
-	pdf(width = 16.708333, height = 8.791667, file = "./output/figures/Figure2.pdf")
-			par(mfrow = c(1,2),  bty = "n", mar = c(5,10,2,1))
-
-			labels <- tolower(rownames(coefTabRR <- margTableRR))
-			yRef <- c(1:4, 7,8, 11:14, 17:19)
-			#Labels <- c("Behaviour", "Development","Life History", "Physiology", "Lab", "Wild", "Ectotherm", "Endotherm", "Arid", "Artificial", "Global", "Temperate", "Tropical", "Females larger", "Males larger", "No difference", "Adults", "Juveniles", "Mixed", "Unknown", "Polygyny", "Promiscuity", "Monogamy", "Unknown", "Both", "Female", "None", "Iteroparous", "Semelparous")
-			#lnRR
-			plot(obs~effect,  type = "n", xlim = c(-0.6, 0.6), ylim = c(0, max(yRef)+2), xlab = "lnRR", ylab = "", data = coefTabRR, yaxt='n', cex.lab = 1.5)
-			abline(v = 0, lty = 2)
-			
-			points(yRef~coefTabRR[-30, "effect"], pch = 16) #-30 from other table
-			arrows(x0=coefTabRR[-30,"effect"] , y0= yRef, x1= coefTabRR[-30,"lower"] , y1 = yRef, length = 0, angle = 90)
-			arrows(x0=coefTabRR[-30,"effect"] , y0= yRef, x1= coefTabRR[-30,"upper"] , y1 = yRef, length = 0, angle = 90)
-			mtext(side  = 2, labels, at = yRef, las = 1)
-			mtext(side  = 2, expression(bold("A)")), at = max(yRef)+2, line = 6, las = 1, cex = 1.5, padj = -1.0)
-			labRef <- c(5,9,15,20) #labRef <- c(5,9,13,20,25,31,37,42,46)
-			titles <- c("Trait Type", "Lab vs. Wild", "Mating Syst.", "Parental care")
-			mtext(side  = 2, titles, font = 2, at = labRef, las = 1, cex = 1)
-			text("Males 'faster'", x = -0.3, y = max(yRef)+2, cex = 1)
-			text("Females 'faster'", x = +0.3, y = max(yRef)+2, cex = 1)
-
-			#lnCVR
-			coefTabCVR <- margTableCVR
-			par(mar = c(5,1,2,10))
-			plot(obs~effect,  type = "n", xlim = c(-0.6, 0.6), ylim = c(0, max(yRef)+2), xlab = "lnCVR", ylab = "", data = coefTabCVR, yaxt='n', cex.lab = 1.5)
-			abline(v = 0, lty = 2)
-						
-			points(yRef~coefTabCVR[-30, "effect"], pch = 16)
-			arrows(x0=coefTabCVR[-30,"effect"] , y0= yRef, x1= coefTabCVR[-30,"lower"] , y1 = yRef, length = 0, angle = 90)
-			arrows(x0=coefTabCVR[-30,"effect"] , y0= yRef, x1= coefTabCVR[-30,"upper"] , y1 = yRef, length = 0, angle = 90)
-			mtext(side  = 2, coefTabCVR$N, at = yRef, las = 1, adj = .5, line = 1)
-			mtext(side = 2, expression(bold("N")), at = max(yRef)+2, las = 1, line = 0.5, cex = 1.2)
-			mtext(side  = 2, expression(bold("B)")), at = max(yRef)+2, line = 1, las = 1, cex = 1.5, padj = -1.0)			
-			text("Males high V", x = -0.3, y = max(yRef)+2, cex = 1)
-			text("Females high V", x = +0.3, y = max(yRef)+2, cex = 1)
-	dev.off()
 
 # 7. Publication Bias
 #----------------------------------------------------------------------------#
@@ -335,39 +288,61 @@
 		mod_avg <- model.avg(test, subset = cumsum(weight) <= 0.95)
 		summary(mod_avg)
 
-# 9. Marginal estimates / unconditional means for the groups. 
-#----------------------------------------------
-	# Modify functions from "effects" package
-
-	x1 <- rbinom(100, 1, 0.5)
-	x2 <- rbinom(100, 1, 0.5)
-	id <- rep(rnorm(10, 0, 1), each = 10)
-	e <- rnorm(100,0,1)
-
-	y <- 2 + 0.5*x1 + 1.5*x2 + id + e
+# 9. Figures
+#----------------------------------------------------------------------------#
+	# Do some plotting. Funnel plots
+	pdf(height = 4.519824, width = 9.938326, file = "./output/figures/funnels.pdf")
+			par(mfrow = c(1,2), mar = c(4, 5, 1, 1))
+			
+			#lnCVR
+	   		funnel(modRR_int, yaxis = "seinv", ylab = "Precision (1/SE)",xlab = "lnRR", pch = 21, digits = 0, las = 1, level = c(95, 99), back = "gray90")
+			abline(v = 0, col = "red")
+			mtext("A)", adj = -0.25, padj = 0.5)	
+		
+			#lnCVR
+			funnel(modCVR_int, yaxis = "seinv", ylab = "", xlab = "lnCVR", pch = 21, digits = 0, las = 1, level = c(95, 99), back = "gray90")
+			abline(v = 0, col = "red")
+			mtext("B)", adj = -0.25, padj = 0.5)	
+		dev.off()		
 	
-	summary(mod)
-	mod2 <- lme(y ~ x1, random= ~ 1|id, method = "ML", data = data)
-	summary(mod2)
+		pdf(height = 7, width = 7, file = "./output/figures/phylogeny.pdf")
+		  	plot(phylo, cex = 0.85)
+		dev.off()
 
-	data <- data.frame(y, x1, x2, id = as.factor(id))
-	library(lme4)
+	pdf(width = 12.678414, height = 5.506608, file = "./output/figures/Figure2.pdf")
+			par(mfrow = c(1,2),  bty = "n", mar = c(5,10,2,1))
 
-	mod <- lme(y ~ x1 + x2, random= ~ 1|id, method = "ML", data = data)
-	summary(mod)
-	mod2 <- lme(y ~ x1, random= ~ 1|id, method = "ML", data = data)
-	summary(mod2)
+			labels <- tolower(rownames(coefTabRR <- margTableRR)) #toupper converts to caps, whereas tolower converts all to lower case. Useful function.
+			yRef <- c(1:4, 7,8, 11:14, 17:19)
+			#Labels <- c("Behaviour", "Development","Life History", "Physiology", "Lab", "Wild", "Ectotherm", "Endotherm", "Arid", "Artificial", "Global", "Temperate", "Tropical", "Females larger", "Males larger", "No difference", "Adults", "Juveniles", "Mixed", "Unknown", "Polygyny", "Promiscuity", "Monogamy", "Unknown", "Both", "Female", "None", "Iteroparous", "Semelparous")
+			#lnRR
+			plot(obs~effect,  type = "n", xlim = c(-0.6, 0.6), ylim = c(0, max(yRef)+2), xlab = "lnRR", ylab = "", data = coefTabRR, yaxt='n', cex.lab = 1.5)
+			abline(v = 0, lty = 2)
+			
+			points(yRef~coefTabRR[-30, "effect"], pch = 16) #-30 from other table
+			arrows(x0=coefTabRR[-30,"effect"] , y0= yRef, x1= coefTabRR[-30,"lower"] , y1 = yRef, length = 0, angle = 90)
+			arrows(x0=coefTabRR[-30,"effect"] , y0= yRef, x1= coefTabRR[-30,"upper"] , y1 = yRef, length = 0, angle = 90)
+			mtext(side  = 2, labels, at = yRef, las = 1)
+			mtext(side  = 2, expression(bold("A)")), at = max(yRef)+2, line = 6, las = 1, cex = 1.5, padj = -1.0)
+			labRef <- c(5,9,15,20) #labRef <- c(5,9,13,20,25,31,37,42,46)
+			titles <- c("Trait Type", "Lab vs. Wild", "Mating Syst.", "Parental care")
+			mtext(side  = 2, titles, font = 2, at = labRef, las = 1, cex = 1)
+			text("Males 'faster'", x = -0.3, y = max(yRef)+2, cex = 1)
+			text("Females 'faster'", x = +0.3, y = max(yRef)+2, cex = 1)
 
-	drop1(mod, test = "Chisq")
+			#lnCVR
+			coefTabCVR <- margTableCVR
+			par(mar = c(5,1,2,10))
+			plot(obs~effect,  type = "n", xlim = c(-0.6, 0.6), ylim = c(0, max(yRef)+2), xlab = "lnCVR", ylab = "", data = coefTabCVR, yaxt='n', cex.lab = 1.5)
+			abline(v = 0, lty = 2)
+						
+			points(yRef~coefTabCVR[-30, "effect"], pch = 16)
+			arrows(x0=coefTabCVR[-30,"effect"] , y0= yRef, x1= coefTabCVR[-30,"lower"] , y1 = yRef, length = 0, angle = 90)
+			arrows(x0=coefTabCVR[-30,"effect"] , y0= yRef, x1= coefTabCVR[-30,"upper"] , y1 = yRef, length = 0, angle = 90)
+			mtext(side  = 2, coefTabCVR$N, at = yRef, las = 1, adj = .5, line = 1)
+			mtext(side = 2, expression(bold("N")), at = max(yRef)+2, las = 1, line = 0.5, cex = 1.2)
+			mtext(side  = 2, expression(bold("B)")), at = max(yRef)+2, line = 1, las = 1, cex = 1.5, padj = -1.0)			
+			text("Males high V", x = -0.3, y = max(yRef)+2, cex = 1)
+			text("Females high V", x = +0.3, y = max(yRef)+2, cex = 1)
+	dev.off()
 
-
-
-
-
-# Trying with ASREML, but little success.
-	# Run in ASREML
-		m2 <- asreml(fixed = lnCVR_es ~ category + background1 + mating + parenting, random = ~study, weights = VlnCVR, family = asreml.gaussian(dispersion = 1), data = data)
-		coef(m2)$fixed
-		names(str(m2))
-
-		m2$vcoeff$fixed
