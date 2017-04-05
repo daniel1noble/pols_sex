@@ -281,3 +281,34 @@ I2 <- function(model, v, sims = 1500, phylo = FALSE){
 	 margEst <- function(margEsts){
 				do.call(cbind, summary(margEsts)[c("effect", "lower", "upper")])
 			}
+
+
+	# Generates a within study covariance matrix
+	covMatrix <- function(data, es_var, cor){
+	 	tmp <- expand.grid(sqrt(data[, es_var]), sqrt(data[, es_var]))
+	 	tmp$cor <- ifelse(tmp$Var1 == tmp$Var2, 1, 0.5)
+		tmp$cov <- tmp$cor * tmp$Var1 * tmp$Var2
+	  	corMat <- matrix(tmp$cov , nrow = nrow(data), ncol = nrow(data))
+  	return(corMat)
+	}
+
+#'@title Function for calculating covariance between dependent effect sizes
+#'@param data the data frame
+#'@param es_var the character identifier effect size sampling error variance column in the data
+#'@param depend the character identifier for the column in the data indicating which pairs of effect sizes are correlated
+#'@param cor The correlation coefficient assumed for calculating the covariance between effect sizes. Shared control can be calculated directly, but is not yet implemented.
+
+VmCovMat <- function(data, es_var, depend, cor = 0.5){
+    	data$dep<-paste(data[,"study"], data[,depend], sep="_")
+
+    	tmp <- reshape::expand.grid.df(data.frame(sd1 = sqrt(data[, es_var]), stdy1 = data[,"dep"]), data.frame(sd2 = sqrt(data[, es_var]), stdy2 = data[,"dep"]))
+
+    	tmp$cor <- ifelse((tmp$stdy1 == tmp$stdy2) & (tmp$sd1 != tmp$sd2), cor, 0)
+		tmp$cov <- tmp$cor * tmp$sd1 * tmp$sd2
+	  	corMat <- matrix(tmp$cov , nrow = nrow(data), ncol = nrow(data))
+	  	diag(corMat) <- data[,es_var]
+  	
+  	return(corMat)
+}
+    
+       

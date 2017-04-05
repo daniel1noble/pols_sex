@@ -27,4 +27,14 @@ ES<-(log(ESD) - log(EMean) + 1 / (2*(EN - 1))) - (log(CSD) - log(CMean) + 1 / (2
 	drop1(mod, test = "Chisq")
 
 
+#Sexual selection, dimorphism and expect faster life in males in certain traits (most), expect corresponding variance in males. 
 
+# Predictions
+#Key findings
+	#1) Males are faster developers (growth rate higher); not what you expect is females are faster in life history (caution: small sample size and generally lifespan so females); Physiology males have higher variance compared to females for physiological traits (mainly immune stuff) and somewhat development (but caution; CI's close to zero). Females have increased variance in life history 
+
+	#2) Overall, in the wild we are getting males running faster POLs
+
+	#3) In polygynous systems males have a faster pace of life and monogramy the opposite. Whereas when both sexes are promicuous we don't see a directional effect.
+
+	#4) Both parental care then males exhibit.

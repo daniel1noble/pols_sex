@@ -22,6 +22,7 @@
 
 	# load data
 		data <- read.csv("./data/POLSsexdb_merged_20170315_recat.csv", stringsAsFactors = FALSE)
+		data_noLH <- subset(data, category == "life history")
 
 # 1. Data Exploration & Processing
 #----------------------------------------------------------------------------#
@@ -134,13 +135,27 @@
 	phylo <- makeNodeLabel(phylo) 
 	is.binary.tree(phylo)
 
+	phyloLH <- drop.tip(phylo, phylo$tip.label[match(gsub(" ", "_", unique(data_noLH$species)), phylo$tip.label)])
+
 	# Compute branch lengths
-	phylo_BL <- compute.brlen(phylo, method = "Grafen", power = 0.5)
+	phylo_BL <- compute.brlen(phylo, method = "Grafen", power = 0.5) # Note that larger values of power produce models with lower AICc estimates, but they are all pretty similar. Estimate of phylo variance increases with smaller power estimates. But, not greatly.
+	phylo_BL_LH <- compute.brlen(phyloLH, method = "Grafen", power = 0.5)
 
 	# Create phylogenetic correlation matrix. For metafor. Make sure names match with species. 
 	phylo_cor <- vcv(phylo_BL, corr = TRUE)
 	names <- gsub("_", " ", rownames(phylo_cor))
 	rownames(phylo_cor) <- colnames(phylo_cor) <- names
+
+	phylo_corLH <- vcv(phylo_BL_LH, corr = TRUE)
+	names <- gsub("_", " ", rownames(phylo_corLH))
+	rownames(phylo_corLH) <- colnames(phylo_corLH) <- names
+
+	# Create within study dependency and test impacts with sensitivity analysis. Assume r = 0.5 to estimate the covariance between two effects.
+
+	 VmatRR <- VmMat(data, "v.lnRR", "dependence")
+	VmatCVR <- VmMat(data, "vlnCVR", "dependence")
+	write.csv(mat, file = "Vmatrix.csv")
+
 
 # 4. Multi-level meta-analytic models (MLMA) - intercept only for heterogeneity 
 #----------------------------------------------------------------------------#
@@ -208,7 +223,7 @@
 	# Note the below model, however, assumes now that the residual variance is fixed! So we must remove the estimation of the observation-level variance, or ADD it into the lme fit to get the same results between metafor and lme. But also problems including nested random effects in lme: https://biostatmatt.com/archives/2718 & here: https://stat.ethz.ch/pipermail/r-help/2002-September/025067.html.
 
 	#lnRR
-		modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + parenting, V = v.lnRR, random = list(~1|study, ~1|species), R = list(species = phylo_cor), method = "ML", data = data)
+		modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + parenting, V = v.lnRR, random = list(~1|study, ~1|species), method = "REML", data = data)
 		
 		modnameRR2 <- rma.mv(lnRR_2 ~ category + background1 + mating + parenting, V = v.lnRR, random = list(~1|study, ~1|species),  method = "ML", data = data)
 		
@@ -313,7 +328,7 @@
 			par(mfrow = c(1,2),  bty = "n", mar = c(5,10,2,1))
 
 			labels <- tolower(rownames(coefTabRR <- margTableRR)) #toupper converts to caps, whereas tolower converts all to lower case. Useful function.
-			yRef <- c(1:4, 7,8, 11:14, 17:19)
+			yRef <- c(1:4, 7,8, 11:13, 16:18)
 			#Labels <- c("Behaviour", "Development","Life History", "Physiology", "Lab", "Wild", "Ectotherm", "Endotherm", "Arid", "Artificial", "Global", "Temperate", "Tropical", "Females larger", "Males larger", "No difference", "Adults", "Juveniles", "Mixed", "Unknown", "Polygyny", "Promiscuity", "Monogamy", "Unknown", "Both", "Female", "None", "Iteroparous", "Semelparous")
 			#lnRR
 			plot(obs~effect,  type = "n", xlim = c(-0.6, 0.6), ylim = c(0, max(yRef)+2), xlab = "lnRR", ylab = "", data = coefTabRR, yaxt='n', cex.lab = 1.5)
@@ -324,7 +339,7 @@
 			arrows(x0=coefTabRR[-30,"effect"] , y0= yRef, x1= coefTabRR[-30,"upper"] , y1 = yRef, length = 0, angle = 90)
 			mtext(side  = 2, labels, at = yRef, las = 1)
 			mtext(side  = 2, expression(bold("A)")), at = max(yRef)+2, line = 6, las = 1, cex = 1.5, padj = -1.0)
-			labRef <- c(5,9,15,20) #labRef <- c(5,9,13,20,25,31,37,42,46)
+			labRef <- c(5,9,14,19) #labRef <- c(5,9,13,20,25,31,37,42,46)
 			titles <- c("Trait Type", "Lab vs. Wild", "Mating Syst.", "Parental care")
 			mtext(side  = 2, titles, font = 2, at = labRef, las = 1, cex = 1)
 			text("Males 'faster'", x = -0.3, y = max(yRef)+2, cex = 1)
