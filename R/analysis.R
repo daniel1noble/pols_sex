@@ -153,8 +153,8 @@
 	# Create within study dependency and test impacts with sensitivity analysis. Assume r = 0.5 to estimate the covariance between two effects.
 
 	 VmatRR <- VmMat(data, "v.lnRR", "dependence")
-	VmatCVR <- VmMat(data, "vlnCVR", "dependence")
-	write.csv(mat, file = "Vmatrix.csv")
+	VmatCVR <- VmMat(data, "VlnCVR", "dependence")
+	#write.csv(mat, file = "Vmatrix.csv")
 
 
 # 4. Multi-level meta-analytic models (MLMA) - intercept only for heterogeneity 
@@ -164,12 +164,14 @@
 
 	# lnRR
 	   modRR_int <- rma.mv(lnRR_2 ~ 1, V = v.lnRR, random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
+	   modRR_intDep <- rma.mv(lnRR_2 ~ 1, V = VmatRR, random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
 
 	   #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
 	   I2(modRR_int, v = data$v.lnRR, phylo = "species")
 
 	# lnCVR
 	   modCVR_int <- rma.mv(lnCVR_es ~ 1, V = VlnCVR , random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
+	   modCVR_intDep <- rma.mv(lnCVR_es ~ 1, V = VmatCVR , random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
 
 	   #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
 	   I2(modCVR_int, v = data$VlnCVR, phylo = "species")
@@ -223,22 +225,24 @@
 	# Note the below model, however, assumes now that the residual variance is fixed! So we must remove the estimation of the observation-level variance, or ADD it into the lme fit to get the same results between metafor and lme. But also problems including nested random effects in lme: https://biostatmatt.com/archives/2718 & here: https://stat.ethz.ch/pipermail/r-help/2002-September/025067.html.
 
 	#lnRR
-		modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + parenting, V = v.lnRR, random = list(~1|study, ~1|species), method = "REML", data = data)
+		modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + parenting, V = v.lnRR, random = list(~1|study, ~1|species), method = "REML", R = list(species = phylo_cor), data = data)
+		AICc(modnameRR)
+		coefRRTable1A <- round_df(data.frame(Est. = modnameRR$b, LCI = modnameRR$ci.lb, LCI = modnameRR$ci.ub), digits = 3)
+
+		#Sensitivity Analysis. Covariance matrix.
+		modnameRRDep <- rma.mv(lnRR_2 ~ category + background1 + mating + parenting, V = VmatRR, R = list(species = phylo_cor), random = list(~1|study, ~1|species), method = "REML", data = data)
+		AICc(modnameRRDep)
+		coefRRTable1B <- round_df(data.frame(Est. = modnameRRDep$b, LCI = modnameRRDep$ci.lb, LCI = modnameRRDep$ci.ub), digits =3)
 		
-		modnameRR2 <- rma.mv(lnRR_2 ~ category + background1 + mating + parenting, V = v.lnRR, random = list(~1|study, ~1|species),  method = "ML", data = data)
-		
-		# The AICc difference between models is fairly negligible. Actually, we could probably simply and just estimate a between species random effect with out the correlation matrix. This is 
-		AICc(modnameRR2) - AICc(modnameRR) 
+		TableS1RR <- rbind(coefRRTable1A, coefRRTable1B)
+		write.csv(TableS1RR, "./output/tables/TableS1RR.csv")
 
 		# Re-fit in lme. Try a little trick: https://biostatmatt.com/archives/2718
 		data2 <- data
 		data2$Dummy <- factor(1)
 		data2 <- groupedData(lnRR_2~1 |Dummy, data2)
-		modRR <- lme(lnRR_2 ~ category + background1 + mating + parenting, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~species-1))), weights = varFixed(~v.lnRR), control=lmeControl(sigma = 1), method = "REML", data = data2)
+		modRR <- lme(lnRR_2 ~ category + background1 + mating + parenting, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~species-1), pdIdent(~obs-1))), weights = varFixed(~v.lnRR), control=lmeControl(sigma = 1), method = "REML", data = data2)
 		summary(modRR)
-
-		modRR_phy <- lme(lnRR_2 ~ category + background1 + mating + parenting, random = pdBlocked(list(pdIdent(~study-1), pdMat(value = phylo_cor))), weights = varFixed(~v.lnRR), control=lmeControl(sigma = 1), method = "REML", data = data2)
-		summary(modRR_phy)
 
 		# Get marginal / unconditional mean estimates from the model.
 		marginalRR <- marginalize(mod = modRR, vars = c("category", "background1", "mating", "parenting")) 
@@ -246,9 +250,23 @@
 		margTableRR$N <- N
 		margTableRR$obs <- 1:nrow(margTableRR)
 
+		# Convert estimate back to percentage difference. Note that variances are extracted from the model excluding the sampling variance. 
+		var <- sum(as.numeric(unique(VarCorr(modRR)[,"Variance"]))[1:3])
+		margTableRR$per <- exp(margTableRR$effect + 0.5*(var))
+
 	#lnCVR
-		modnameCVR <- rma.mv(lnCVR_es ~ category + background1 + mating + parenting, V = VlnCVR, random = list(~1|study, ~1|species), method = "REML", data = data)
-		modnameCVR
+	
+		modnameCVR <- rma.mv(lnCVR_es ~ category + background1 + mating + parenting, V = VlnCVR, random = list(~1|study, ~1|species), method = "REML", R = list(species = phylo_cor), data = data)
+		AICc(modnameCVR)
+		coefCVRTable1A <- round_df(data.frame(Est. = modnameCVR$b, LCI = modnameCVR$ci.lb, LCI = modnameCVR$ci.ub), digits = 3)
+
+		#Sensitivity Analysis. Covariance matrix.
+		modnameCVRDep <- rma.mv(lnCVR_es ~ category + background1 + mating + parenting, V = VmatCVR, R = list(species = phylo_cor), random = list(~1|study, ~1|species), method = "REML", data = data)
+		AICc(modnameCVRDep)
+		coefCVRTable1B <- round_df(data.frame(Est. = modnameCVRDep$b, LCI = modnameCVRDep$ci.lb, LCI = modnameCVRDep$ci.ub), digits =3)
+		
+		TableS1CVR <- rbind(coefCVRTable1A, coefCVRTable1B)
+		write.csv(TableS1CVR, "./output/tables/TableS1CVR.csv")
 
 		# Re-fit in lme. Try a little trick: https://biostatmatt.com/archives/2718
 		data2 <- data
@@ -282,28 +300,7 @@
 	   eggerlnCVR <- lm(WlnCVR ~ precisionlnCVR)
 	   summary(eggerlnCVR)
 
-# 8. Multi-model inference with metafor and glmulti. Can find some details here: http://www.metafor-project.org/doku.php/tips:model_selection_with_glmulti
-#----------------------------------------------------------------------------#
-	
-	# Model averaging with MuMIn
-		updated.rma.mv <- updateable(rma.mv)
-		updated.rma.mv
-
-		modname <- updated.rma.mv(lnRR_2 ~ 1 + category + mating + background1 + parenting, V = v.lnRR, random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
-
-		getCall(modname)
-		
-		# Function updates modname so it can be used by dredge etc.
-		update(modname)
-
-		test <- dredge(modname)
-
-		test2 <- get.model(test, )
-
-		mod_avg <- model.avg(test, subset = cumsum(weight) <= 0.95)
-		summary(mod_avg)
-
-# 9. Figures
+# 8. Figures
 #----------------------------------------------------------------------------#
 	# Do some plotting. Funnel plots
 	pdf(height = 4.519824, width = 9.938326, file = "./output/figures/funnels.pdf")
