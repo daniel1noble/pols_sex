@@ -297,6 +297,7 @@ I2 <- function(model, v, sims = 1500, phylo = FALSE){
 #'@param es_var the character identifier effect size sampling error variance column in the data
 #'@param depend the character identifier for the column in the data indicating which pairs of effect sizes are correlated
 #'@param cor The correlation coefficient assumed for calculating the covariance between effect sizes. Shared control can be calculated directly, but is not yet implemented.
+#' IMPORTANT: Note that the data frame SHOULD be arranged BEFORE using function on the dependence column. The reason is that sometimes you can get grouping spread out across a few rows. As of yet, I don't have checks for this and so making sure the data is arranged will ensure that the ORDER of the variances in the dataset match the cov matrix. 
 
 VmCovMat <- function(data, es_var, depend, cor = 0.5){
     	data$dep<-paste(data[,"study"], data[,depend], sep="_")
