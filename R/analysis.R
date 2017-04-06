@@ -22,7 +22,6 @@
 
 	# load data
 		data <- read.csv("./data/POLSsexdb_merged_20170315_recat.csv", stringsAsFactors = FALSE)
-		data_noLH <- subset(data, category == "life history")
 
 # 1. Data Exploration & Processing
 #----------------------------------------------------------------------------#
@@ -135,26 +134,18 @@
 	phylo <- makeNodeLabel(phylo) 
 	is.binary.tree(phylo)
 
-	phyloLH <- drop.tip(phylo, phylo$tip.label[match(gsub(" ", "_", unique(data_noLH$species)), phylo$tip.label)])
-
 	# Compute branch lengths
 	phylo_BL <- compute.brlen(phylo, method = "Grafen", power = 0.5) # Note that larger values of power produce models with lower AICc estimates, but they are all pretty similar. Estimate of phylo variance increases with smaller power estimates. But, not greatly.
-	phylo_BL_LH <- compute.brlen(phyloLH, method = "Grafen", power = 0.5)
 
 	# Create phylogenetic correlation matrix. For metafor. Make sure names match with species. 
 	phylo_cor <- vcv(phylo_BL, corr = TRUE)
 	names <- gsub("_", " ", rownames(phylo_cor))
 	rownames(phylo_cor) <- colnames(phylo_cor) <- names
 
-	phylo_corLH <- vcv(phylo_BL_LH, corr = TRUE)
-	names <- gsub("_", " ", rownames(phylo_corLH))
-	rownames(phylo_corLH) <- colnames(phylo_corLH) <- names
-
 	# Create within study dependency and test impacts with sensitivity analysis. Assume r = 0.5 to estimate the covariance between two effects.
-
 	 VmatRR <- VmMat(data, "v.lnRR", "dependence")
 	VmatCVR <- VmMat(data, "VlnCVR", "dependence")
-	#write.csv(mat, file = "Vmatrix.csv")
+	
 
 
 # 4. Multi-level meta-analytic models (MLMA) - intercept only for heterogeneity 
@@ -164,14 +155,12 @@
 
 	# lnRR
 	   modRR_int <- rma.mv(lnRR_2 ~ 1, V = v.lnRR, random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
-	   modRR_intDep <- rma.mv(lnRR_2 ~ 1, V = VmatRR, random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
-
-	   #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
+	 
+	  #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
 	   I2(modRR_int, v = data$v.lnRR, phylo = "species")
 
 	# lnCVR
 	   modCVR_int <- rma.mv(lnCVR_es ~ 1, V = VlnCVR , random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
-	   modCVR_intDep <- rma.mv(lnCVR_es ~ 1, V = VmatCVR , random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
 
 	   #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
 	   I2(modCVR_int, v = data$VlnCVR, phylo = "species")
