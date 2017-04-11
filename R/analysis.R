@@ -19,6 +19,7 @@
 		library(Hmisc)
 		library(rotl)
 		library(devtools)
+		library(MCMCglmm)
 
 	# load data
 		data <- read.csv("./data/POLSsexdb_merged_20170315_recat.csv", stringsAsFactors = FALSE)
@@ -142,12 +143,12 @@
 	names <- gsub("_", " ", rownames(phylo_cor))
 	rownames(phylo_cor) <- colnames(phylo_cor) <- names
 
+	Ainv <- inverseA(phylo_BL, nodes = "ALL", scale = TRUE)$Ainv
+
 	# Create within study dependency and test impacts with sensitivity analysis. Assume r = 0.5 to estimate the covariance between two effects.
-	 VmatRR <- VmMat(data, "v.lnRR", "dependence")
-	VmatCVR <- VmMat(data, "VlnCVR", "dependence")
+	 VmatRR <- VmCovMat(data, "v.lnRR", "dependence")
+	VmatCVR <- VmCovMat(data, "VlnCVR", "dependence")
 	
-
-
 # 4. Multi-level meta-analytic models (MLMA) - intercept only for heterogeneity 
 #----------------------------------------------------------------------------#
 	# Study and species level random effects are mostly confounded so study will probably capture most variation anyway, but worth attempting to estimate
@@ -205,7 +206,6 @@
 
 		coefTabCVR$N <- N
 		coefTabCVR$obs <- 1:nrow(coefTabCVR)
-
 		
 # 6. Marginal estimates / unconditional means for the groups. 
 #----------------------------------------------
@@ -270,18 +270,34 @@
 		margTableCVR$N <- N
 		margTableCVR$obs <- 1:nrow(margTableCVR)
 
-
 # 7. Publication Bias
 #----------------------------------------------------------------------------#
-  # Eggers regression
+    # Eggers regression for lnRR. Modified version. Residuals should remove non-independence from multi-level model.
+       # Run model in MCMCglmm
+       data$phylo <- gsub(" ", "_", data$species)
+       colnames(data)[match("trait", colnames(data))] <- "trait2"
+       data$esID <- 1:dim(data)[1]
+       Vmat <- as(solve(diag(data$v.lnRR)), "dgCMatrix")
+       colnames(Vmat) <- rownames(Vmat) <- data$esID
+
+       prior = list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002), G2 =  list(V = 1, nu = 0.002), G3 = list(V = 1, fix = 1))) # Parameter expanded priors: V = 1, nu = 0.002, alpha.mu = 0, alpha.V = 1000
+
+       # Some mixing problems with phylogeny. Use species, which is pretty much the same. Actually, mixing problems with species too! Probably confound with study, but still different than metafor.
+
+       modMCMCglmmRR <- MCMCglmm(lnRR_2 ~ 1, random = ~study + species + esID, ginverse = list(esID = Vmat), data = data, nitt = 500000, thin = 100, pr = TRUE, family = "gaussian")
+       #modMCMCglmmRR <- MCMCglmm(lnRR_2 ~ 1, mev = data$v.lnRR, random = ~study + phylo, ginverse = list(phylo = Ainv), data = data, nitt = 500000, thin = 100, pr = TRUE, family = "gaussian")
+       summary(modMCMCglmmRR)
+
+       fitted <- predict(modMCMCglmmRR)
+
 	   reslnRR <- residuals(modRR_int)
 	   precisionlnRR <- 1/sqrt(data$v.lnRR)
 	   WlnRR <- reslnRR*precisionlnRR
 
 	   eggerlnRR <- lm(WlnRR ~ precisionlnRR)
 	   summary(eggerlnRR)
-	   
-	   # Eggers regression
+	  
+	# Eggers regression for lnCVR. Modified version. Residuals should remove non-independence from multi-level model.
 	   reslnCVR <- residuals(modCVR_int)
 	   precisionlnCVR <- 1/sqrt(data$VlnCVR)
 	   WlnCVR <- reslnCVR*precisionlnCVR
