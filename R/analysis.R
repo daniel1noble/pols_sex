@@ -274,28 +274,40 @@
 #----------------------------------------------------------------------------#
     # Eggers regression for lnRR. Modified version. Residuals should remove non-independence from multi-level model.
        # Run model in MCMCglmm
-       data$phylo <- gsub(" ", "_", data$species)
-       colnames(data)[match("trait", colnames(data))] <- "trait2"
-       data$esID <- 1:dim(data)[1]
-       Vmat <- as(solve(diag(data$v.lnRR)), "dgCMatrix")
-       colnames(Vmat) <- rownames(Vmat) <- data$esID
+	       data$phylo <- gsub(" ", "_", data$species)
+	       colnames(data)[match("trait", colnames(data))] <- "trait2"
+	       data$esID <- 1:dim(data)[1]
+	       Vmat <- as(solve(diag(data$v.lnRR)), "dgCMatrix")
+	       colnames(Vmat) <- rownames(Vmat) <- data$esID
 
-       prior = list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002), G2 =  list(V = 1, nu = 0.002), G3 = list(V = 1, fix = 1))) # Parameter expanded priors: V = 1, nu = 0.002, alpha.mu = 0, alpha.V = 1000
+	       prior = list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002), G2 =  list(V = 1, nu = 0.002), G3 = list(V = 1, fix = 1))) # Parameter expanded priors: V = 1, nu = 0.002, alpha.mu = 0, alpha.V = 1000
 
-       # Some mixing problems with phylogeny. Use species, which is pretty much the same. Actually, mixing problems with species too! Probably confound with study, but still different than metafor.
+       # Some mixing problems with phylogeny. Use species, which is pretty much the same. Actually, mixing problems with species too! Probably confound with study, but still different than metafor. Actually, I've figured this out. Turns out that when using mev argument this causes major mixing problems for species and phylogeny. This is WEIRD! So, added to ginverse, works pretty good and effective sample size for phylo goes up to normal. Not sure why mixing is compromised when using mev?? This problem above is NOT solved by using parameter expanded priors which should mix better than Inverse-Wishart.
+	       modMCMCglmmRR <- MCMCglmm(lnRR_2 ~ 1, random = ~study + phylo + esID, ginverse = list(phylo = Ainv, esID = Vmat), data = data, prior = prior, nitt = 500000, thin = 100, pr = TRUE, family = "gaussian", verbose = FALSE)
 
-       modMCMCglmmRR <- MCMCglmm(lnRR_2 ~ 1, random = ~study + species + esID, ginverse = list(esID = Vmat), data = data, nitt = 500000, thin = 100, pr = TRUE, family = "gaussian")
-       #modMCMCglmmRR <- MCMCglmm(lnRR_2 ~ 1, mev = data$v.lnRR, random = ~study + phylo, ginverse = list(phylo = Ainv), data = data, nitt = 500000, thin = 100, pr = TRUE, family = "gaussian")
-       summary(modMCMCglmmRR)
+	       modMCMCglmmRR <- MCMCglmm(lnRR_2 ~ 1, random = ~study + phylo, mev=data$v.lnRR, data = data, nitt = 100000, thin = 100, pr = TRUE, family = "gaussian", verbose = FALSE)
+	       summary(modMCMCglmmRR)
+	       I2(modMCMCglmmRR, ME = "esID", v = data$v.lnRR, phylo = "phylo")
 
-       fitted <- predict(modMCMCglmmRR)
+       # Now that we have a multi-level model that estimates sources of non-independence and accounts for sampling error variance (esID), we can now extract residuals that are marginalized over the random effects. q
+	       fitted <- predict(modMCMCglmmRR, marginal = ~esID) # This nearly matches perfectly with metafor
+	       fitted <- predict(modMCMCglmmRR) # Slightly confusing because default is that all RE are marginalised.....object$Random$formula, which matches perfectly with metafor resi
+	       fitted <- predict(modMCMCglmmRR, marginal = ~study + phylo) # This should ignore esID, assuming we have accounted for this in the model already anyway...but marginalise over all study and phylo effects....so 
+	       e <- data$lnRR_2 - fitted
 
-	   reslnRR <- residuals(modRR_int)
-	   precisionlnRR <- 1/sqrt(data$v.lnRR)
-	   WlnRR <- reslnRR*precisionlnRR
+       # Now grab the residuals from metafor to find out whether these residuals have also marginalised over the random effects in the model.
+		   reslnRR <- residuals(modRR_int)
+		   precisionlnRR <- 1/sqrt(data$v.lnRR)
+	   
+	   # Test that MCMCglmm and metafor are giving the same stuff
+		   cor.test(e, reslnRR)
 
-	   eggerlnRR <- lm(WlnRR ~ precisionlnRR)
-	   summary(eggerlnRR)
+	   # Egger's regression
+		   WlnRR <- reslnRR*precisionlnRR
+		   WlnRR <- e*precisionlnRR
+
+		   eggerlnRR <- lm(WlnRR ~ precisionlnRR)
+		   summary(eggerlnRR)
 	  
 	# Eggers regression for lnCVR. Modified version. Residuals should remove non-independence from multi-level model.
 	   reslnCVR <- residuals(modCVR_int)
