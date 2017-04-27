@@ -93,6 +93,15 @@
 		data$breeding <- as.factor(data$breeding)
 		data$obs <- 1:nrow(data)
 
+	# Get N for all predictors
+		vars <- c("category" , "background1" , "mating" , "breeding")
+
+		N <- c()
+		for(i in 1:length(vars)){
+			samp <- as.vector(t(table(data[,vars[i]])))
+			   N <- c(N, samp)
+		}
+
 # 2. Exploratory plotting
 #----------------------------------------------------------------------------#
 		
@@ -216,57 +225,22 @@
 	# Create a table of within trait I2 estimates.
 		lnRR <- data.frame(rbind(PhysI2, DevI2, BehavI2, LHI2))
 		lnCVR <- data.frame(rbind(PhysCVRI2, DevCVRI2, BehavCVRI2, LHCVRI2))
-
-# 5. Multi-level meta-regression models
-#----------------------------------------------------------------------------#
-	# First get N for all predictors
-		vars <- c("category" , "background1" , "mating" , "breeding")
-
-		N <- c()
-		for(i in 1:length(vars)){
-			samp <- as.vector(t(table(data[,vars[i]])))
-			   N <- c(N, samp)
-		}
-	
-	# lnRR
-		# Fun univariate models for each predictor of interest. Get the mean in each of these groups.
-
-		coefTabRR <- c()
-		for(i in 1:length(vars)){
-			form <- formula(paste0("lnRR_2", "~ -1 +", vars[i]))
-			modname <- rma.mv(form, V = v.lnRR, random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
-			extraction <- extract(modname)
-			extraction$transf <- exp(as.vector(extraction$Est.) + 0.5*sum(modname$sigma2))
-			coefTabRR <- rbind(coefTabRR, extraction)
-		}
-
-		coefTabRR$N <- N
-		coefTabRR$obs <- 1:nrow(coefTabRR)
-
-	# lnCVR
-		vars <- c("category" , "background1" , "thermy" , "climate_sp" , "SSD" , "ageclass" , "mating" , "parenting" , "breeding")
-
-		coefTabCVR <- c()
-		for(i in 1:length(vars)){
-			form <- formula(paste0("lnCVR_es", "~ -1 +", vars[i]))
-			modname <- rma.mv(form, V = VlnCVR, random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
-			extraction <- extract(modname)
-			extraction$transf <- exp(as.vector(extraction$Est.) + 0.5*sum(modname$sigma2))
-			coefTabCVR <- rbind(coefTabCVR, extraction)
-		}
-
-		coefTabCVR$N <- N
-		coefTabCVR$obs <- 1:nrow(coefTabCVR)
 		
-# 6. Marginal estimates / unconditional means for the groups. 
+# 5. Marginal estimates / unconditional means for the groups. 
 #----------------------------------------------
 	# Run some "full" models with the relevant variables discussed. Run in lme as we can then use the effects package
+	# Run model in MCMCglmm
+	       data$phylo <- gsub(" ", "_", data$species)
+	       colnames(data)[match("trait", colnames(data))] <- "trait2"
+	       data$esID <- 1:dim(data)[1]
+	       Vmat <- as(solve(diag(data$v.lnRR)), "dgCMatrix")
+	       colnames(Vmat) <- rownames(Vmat) <- data$esID
 
 	# Note the below model, however, assumes now that the residual variance is fixed! So we must remove the estimation of the observation-level variance, or ADD it into the lme fit to get the same results between metafor and lme. But also problems including nested random effects in lme: https://biostatmatt.com/archives/2718 & here: https://stat.ethz.ch/pipermail/r-help/2002-September/025067.html.
 
 	#lnRR
 		modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = v.lnRR, random = list(~1|study, ~1|species), method = "REML", R = list(species = phylo_cor), data = data)
-		AICc(modnameRR)
+
 		coefRRTable1A <- round_df(data.frame(Est. = modnameRR$b, LCI = modnameRR$ci.lb, LCI = modnameRR$ci.ub), digits = 3)
 
 		#Sensitivity Analysis. Covariance matrix.
@@ -276,6 +250,20 @@
 		
 		TableS1RR <- rbind(coefRRTable1A, coefRRTable1B)
 		write.csv(TableS1RR, "./output/tables/TableS1RR.csv")
+
+		#Predictions for each trait category. 
+			newDat <- expand.grid(list(0, unique(data$background1), unique(data$category),unique(data$mating), unique(data$breeding), 1, "M205"), stringsAsFactors = TRUE)
+			colnames(newDat) <- c("lnRR_2", "background1", "category","mating", "breeding", "esID", "study")
+			
+			# The model for predictions. Much easier to predict with MCMCglmm objects and can integrate RE's
+			prior = list(R = list(V = 1, nu = 0.002, alpha.mu = 0, alpha.V = 1000), G = list(G1 = list(V = 1, nu = 0.002, alpha.mu = 0, alpha.V = 1000),  G2 = list(V = 1, fix = 1)))
+
+			modnameRRMCMC <- MCMCglmm(lnRR_2 ~ category + background1 + mating + breeding, random = ~study + esID, ginverse = list(esID = Vmat), nitt = 1000000, thin = 1000, pr = TRUE, family = "gaussian", verbose = FALSE, data = data)
+			summary(modnameRRMCMC)
+
+		# Make predictions for trait categories in the various levels
+			pred <- predict(modnameRRMCMC, newdata=newDat, marginal = ~esID, interval = "confidence")
+			predictions <- cbind(newDat, pred)[predictions$background1 == "wild", ]
 
 		# Re-fit in lme. Try a little trick: https://biostatmatt.com/archives/2718
 		data2 <- data
@@ -323,16 +311,10 @@
 		margTableCVR$N <- N
 		margTableCVR$obs <- 1:nrow(margTableCVR)
 
-# 7. Publication Bias
+# 6. Publication Bias
 #----------------------------------------------------------------------------#
     # Eggers regression for lnRR. Modified version. Residuals should remove non-independence from multi-level model.
-       # Run model in MCMCglmm
-	       data$phylo <- gsub(" ", "_", data$species)
-	       colnames(data)[match("trait", colnames(data))] <- "trait2"
-	       data$esID <- 1:dim(data)[1]
-	       Vmat <- as(solve(diag(data$v.lnRR)), "dgCMatrix")
-	       colnames(Vmat) <- rownames(Vmat) <- data$esID
-
+      
 	       prior = list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002), G2 =  list(V = 1, nu = 0.002), G3 = list(V = 1, fix = 1))) # Parameter expanded priors: V = 1, nu = 0.002, alpha.mu = 0, alpha.V = 1000
 
        # Some mixing problems with phylogeny. Use species, which is pretty much the same. Actually, mixing problems with species too! Probably confound with study, but still different than metafor. Actually, I've figured this out. Turns out that when using mev argument this causes major mixing problems for species and phylogeny. This is WEIRD! So, added to ginverse, works pretty good and effective sample size for phylo goes up to normal. Not sure why mixing is compromised when using mev?? This problem above is NOT solved by using parameter expanded priors which should mix better than Inverse-Wishart.
@@ -388,7 +370,7 @@
 		   metaResidCRR <- rma(yi=reslnCVR, vi = data$VlnCVR)
 		   tfCVR <-trimfill(metaResidCRR)
 
-# 8. Figures
+# 7. Figures
 #----------------------------------------------------------------------------#
 	# Do some plotting. Funnel plots
 	pdf(height = 4.519824, width = 9.938326, file = "./output/figures/funnels.pdf")
@@ -447,7 +429,7 @@
 	dev.off()
 
 pdf(height = 7, width = 7, file = "./output/figures/ FigureS1.pdf")
-# Check out mean-variance relationships in each sex
+	# Check out mean-variance relationships in each sex
 		par(mar = c(5,5,1,1))
 		plot(log(Mean_M) ~ log(SD_M), ylab = "log(Mean)", xlab = "log(SD)", data = data, col = "blue", las = 1, cex = 1.5, cex.axis = 1.5, cex.lab = 1.5)
 		points(log(Mean_F) ~ log(SD_F),  data = data, col = "red", cex = 1.5)
@@ -456,3 +438,22 @@ pdf(height = 7, width = 7, file = "./output/figures/ FigureS1.pdf")
 		box()
 		#abline(a = 0, b = 1)
 dev.off()
+
+
+pdf(width=6.907489, height = 5.859031, file = "./output/figures/pred.Fig.pdf")
+	par(bty = "n", mar = c(5,10,2,1))
+			predictions$yRef <- c(c(1:(0.5*(nrow(predictions)))), c(15:(nrow(predictions)+2)))
+			Labels <- as.character(interaction(predictions$category, predictions$mating))
+			#lnRR
+			plot(yRef~fit,  type = "n", xlim = c(-0.5, 0.5), ylim = c(0, max(yRef)+2), xlab = "Predicted lnRR", ylab = "", data = predictions, yaxt='n', cex.lab = 1.5)
+			abline(v = 0, lty = 2, col = "gray90")
+			
+			points(predictions$yRef~predictions[, "fit"], pch = 16) #-30 from other table
+			arrows(x0=predictions[,"fit"] , y0= yRef, x1= predictions[,"lwr"] , y1 = yRef, length = 0, angle = 90)
+			arrows(x0=predictions[,"fit"] , y0= yRef, x1= predictions[,"upr"] , y1 = yRef, length = 0, angle = 90)
+
+			text(x = 0, y = 28, "iteroparous", font = 2)
+			text(x = 0, y = 13, "semelparous", font = 2)
+			mtext(side  = 2, Labels, at = yRef, las = 1, cex = 0.8)
+dev.off()			
+
