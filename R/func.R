@@ -228,13 +228,15 @@ I2 <- function(model, v, sims = 1500, phylo = FALSE){
 		 I2_total   <- Vt / VT
 
 		  if(phylo == FALSE){
-		  	tmpMatrix <- Matrix::cBind(I2_re[,-match("obs", colnames(I2_re))], total = I2_total)
+		  	## FIXED PROBLEM WITH COLUMN NAMES in I2. FIXED: Needs to be called data.frame.
+		  	tmpMatrix <- as.data.frame(Matrix::cBind(I2_re[,-match("obs", colnames(I2_re))], I2_total))
+		  		colnames(tmpMatrix) <- c(colnames(I2_re)[-match("obs", colnames(I2_re))], "total")
 		   }else{
 		  	I2_phylo <- Sims[, match(phylo, colnames(sigma2))] / Vt
-		  	 tmpMatrix <- Matrix::cBind(I2_re[,-match("obs", colnames(I2_re))], phylo = I2_phylo, total = I2_total)
+		  	 tmpMatrix <- as.data.frame(Matrix::cBind(I2_re[,-match("obs", colnames(I2_re))], phylo = I2_phylo, total = I2_total))
 		  }
 
-		CI <- lapply(tmpMatrix, function(x) stats::quantile(x, c(0.025, 0.975), na.rm = TRUE))
+		CI <- lapply(tmpMatrix, function(x) stats::quantile(x, c(0.025, 0.975), na.rm = TRUE)) ## Problem here!! is producing many CI's when it should match the cols.
 		I_CI <- as.data.frame(do.call(rbind, CI))
 		colnames(I_CI) <- c("2.5% CI", "97.5% CI")
 		I2_table <- Matrix::cBind(I2_Est. = colMeans(tmpMatrix), I_CI )

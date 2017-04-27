@@ -20,6 +20,7 @@
 		library(rotl)
 		library(devtools)
 		library(MCMCglmm)
+		library(MuMIn)
 
 	# load data
 		data <- read.csv("./data/POLSsexdb_merged_20170315_recat.csv", stringsAsFactors = FALSE)
@@ -89,6 +90,8 @@
 		data$background1 <- as.factor(data$background1)
 		data$mating <- as.factor(data$mating)
 		data$parenting <- as.factor(data$parenting)
+		data$breeding <- as.factor(data$breeding)
+		data$obs <- 1:nrow(data)
 
 # 2. Exploratory plotting
 #----------------------------------------------------------------------------#
@@ -107,13 +110,6 @@
 			text(paste("N = ", bp.out1$n), x = unique(bp.out1$group), y = 2)
 		}
 	
-		# Check out mean-variance relationships in each sex
-		plot(log(Mean_M) ~ log(SD_M), ylab = "log(X)", xlab = "log(SD)", data = data, col = "blue", las = 1)
-		points(log(Mean_F) ~ log(SD_F),  data = data, col = "red")
-		points(y = c(11, 12), x = c(-5, -5), col = c("blue", "red"))
-		text(c("Males", "Females"), y = c(10.5, 11.5), x = c(-4.5, -4.5), adj = c(0,0))
-		abline(a = 0, b = 1)
-
 # 3. Create covariance matrix
 #----------------------------------------------------------------------------#
 	# Phylogenetic correlation matrix
@@ -152,7 +148,6 @@
 # 4. Multi-level meta-analytic models (MLMA) - intercept only for heterogeneity 
 #----------------------------------------------------------------------------#
 	# Study and species level random effects are mostly confounded so study will probably capture most variation anyway, but worth attempting to estimate
-		data$obs <- 1:nrow(data)
 
 	# lnRR
 	   modRR_int <- rma.mv(lnRR_2 ~ 1, V = v.lnRR, random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
@@ -160,16 +155,72 @@
 	  #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
 	   I2(modRR_int, v = data$v.lnRR, phylo = "species")
 
+	   #I2 for various trait categories
+	   Phys <- subset(data, data$category == "physiology")
+	  modRR_intPhys <- rma.mv(lnRR_2 ~ 1, V = v.lnRR, random = list(~1|study, ~1|obs), data = Phys)
+	 
+	  #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
+	   PhysI2 <- I2(modRR_intPhys, v = Phys$v.lnRR)
+
+	   #I2 for various trait categories
+	   dev <- subset(data, data$category == "development")
+	  modRR_intDev <- rma.mv(lnRR_2 ~ 1, V = v.lnRR, random = list(~1|study, ~1|obs), data = dev)
+	 
+	  #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
+	   DevI2 <- I2(modRR_intDev, v = dev$v.lnRR, phylo = FALSE)
+
+	   #I2 for various trait categories
+	   behav <- subset(data, data$category == "behaviour")
+	  modRR_intbehav <- rma.mv(lnRR_2 ~ 1, V = v.lnRR, random = list(~1|study, ~1|obs), data = behav)
+	 
+	  #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
+	   BehavI2 <- I2(modRR_intbehav, v = behav$v.lnRR, phylo = FALSE)
+
+	    #I2 for various trait categories
+	   LH <- subset(data, data$category == "life history")
+	  modRR_intLH <- rma.mv(lnRR_2 ~ 1, V = v.lnRR, random = list(~1|study, ~1|obs), data = LH)
+	 
+	  #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
+	   LHI2 <- I2(modRR_intLH, v = LH$v.lnRR, phylo = FALSE)
+
 	# lnCVR
 	   modCVR_int <- rma.mv(lnCVR_es ~ 1, V = VlnCVR , random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
 
 	   #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
 	   I2(modCVR_int, v = data$VlnCVR, phylo = "species")
 
+	   #I2 for various trait categories
+	  modCVR_intPhys <- rma.mv(lnCVR_es ~ 1, V = VlnCVR, random = list(~1|study, ~1|obs), data = Phys)
+	 
+	  #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
+	   PhysCVRI2 <- I2(modCVR_intPhys, v = Phys$VlnCVR)
+
+	   #I2 for various trait categories
+	  modCVR_intDev <- rma.mv(lnCVR_es ~ 1, V = VlnCVR, random = list(~1|study, ~1|obs), data = dev)
+	 
+	  #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
+	   DevCVRI2 <- I2(modCVR_intDev, v = dev$VlnCVR)
+
+	   #I2 for various trait categories
+	  modCVR_intBehav <- rma.mv(lnCVR_es ~ 1, V = VlnCVR, random = list(~1|study, ~1|obs), data = behav)
+	 
+	  #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
+	   BehavCVRI2 <- I2(modCVR_intBehav, v = behav$VlnCVR)
+
+	    #I2 for various trait categories
+	  modCVR_intLH <- rma.mv(lnCVR_es ~ 1, V = VlnCVR, random = list(~1|study, ~1|obs), data = LH)
+	 
+	  #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
+	   LHCVRI2 <- I2(modCVR_intLH, v = LH$VlnCVR, phylo = FALSE)
+
+	# Create a table of within trait I2 estimates.
+		lnRR <- data.frame(rbind(PhysI2, DevI2, BehavI2, LHI2))
+		lnCVR <- data.frame(rbind(PhysCVRI2, DevCVRI2, BehavCVRI2, LHCVRI2))
+
 # 5. Multi-level meta-regression models
 #----------------------------------------------------------------------------#
 	# First get N for all predictors
-		vars <- c("category" , "background1" , "mating" , "parenting")
+		vars <- c("category" , "background1" , "mating" , "breeding")
 
 		N <- c()
 		for(i in 1:length(vars)){
@@ -214,12 +265,12 @@
 	# Note the below model, however, assumes now that the residual variance is fixed! So we must remove the estimation of the observation-level variance, or ADD it into the lme fit to get the same results between metafor and lme. But also problems including nested random effects in lme: https://biostatmatt.com/archives/2718 & here: https://stat.ethz.ch/pipermail/r-help/2002-September/025067.html.
 
 	#lnRR
-		modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + parenting, V = v.lnRR, random = list(~1|study, ~1|species), method = "REML", R = list(species = phylo_cor), data = data)
+		modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = v.lnRR, random = list(~1|study, ~1|species), method = "REML", R = list(species = phylo_cor), data = data)
 		AICc(modnameRR)
 		coefRRTable1A <- round_df(data.frame(Est. = modnameRR$b, LCI = modnameRR$ci.lb, LCI = modnameRR$ci.ub), digits = 3)
 
 		#Sensitivity Analysis. Covariance matrix.
-		modnameRRDep <- rma.mv(lnRR_2 ~ category + background1 + mating + parenting, V = VmatRR, R = list(species = phylo_cor), random = list(~1|study, ~1|species), method = "REML", data = data)
+		modnameRRDep <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = VmatRR, R = list(species = phylo_cor), random = list(~1|study, ~1|species), method = "REML", data = data)
 		AICc(modnameRRDep)
 		coefRRTable1B <- round_df(data.frame(Est. = modnameRRDep$b, LCI = modnameRRDep$ci.lb, LCI = modnameRRDep$ci.ub), digits =3)
 		
@@ -230,11 +281,12 @@
 		data2 <- data
 		data2$Dummy <- factor(1)
 		data2 <- groupedData(lnRR_2~1 |Dummy, data2)
-		modRR <- lme(lnRR_2 ~ category + background1 + mating + parenting, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~species-1), pdIdent(~obs-1))), weights = varFixed(~v.lnRR), control=lmeControl(sigma = 1), method = "REML", data = data2)
+		modnameRRMeta <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = v.lnRR, random = list(~1|study, ~1|species), method = "REML", data = data2)
+		modRR <- lme(lnRR_2 ~ category + background1 + mating + breeding, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~species-1))), weights = varFixed(~v.lnRR), control=lmeControl(sigma = 1), method = "REML", data = data2)
 		summary(modRR)
 
 		# Get marginal / unconditional mean estimates from the model.
-		marginalRR <- marginalize(mod = modRR, vars = c("category", "background1", "mating", "parenting")) 
+		marginalRR <- marginalize(mod = modRR, vars = c("category", "background1", "mating", "breeding")) 
 		margTableRR <- margTable(marginalRR)
 		margTableRR$N <- N
 		margTableRR$obs <- 1:nrow(margTableRR)
@@ -245,12 +297,12 @@
 
 	#lnCVR
 	
-		modnameCVR <- rma.mv(lnCVR_es ~ category + background1 + mating + parenting, V = VlnCVR, random = list(~1|study, ~1|species), method = "REML", R = list(species = phylo_cor), data = data)
+		modnameCVR <- rma.mv(lnCVR_es ~ category + background1 + mating + breeding, V = VlnCVR, random = list(~1|study, ~1|species), method = "REML", R = list(species = phylo_cor), data = data)
 		AICc(modnameCVR)
 		coefCVRTable1A <- round_df(data.frame(Est. = modnameCVR$b, LCI = modnameCVR$ci.lb, LCI = modnameCVR$ci.ub), digits = 3)
 
 		#Sensitivity Analysis. Covariance matrix.
-		modnameCVRDep <- rma.mv(lnCVR_es ~ category + background1 + mating + parenting, V = VmatCVR, R = list(species = phylo_cor), random = list(~1|study, ~1|species), method = "REML", data = data)
+		modnameCVRDep <- rma.mv(lnCVR_es ~ category + background1 + mating + breeding, V = VmatCVR, R = list(species = phylo_cor), random = list(~1|study, ~1|species), method = "REML", data = data)
 		AICc(modnameCVRDep)
 		coefCVRTable1B <- round_df(data.frame(Est. = modnameCVRDep$b, LCI = modnameCVRDep$ci.lb, LCI = modnameCVRDep$ci.ub), digits =3)
 		
@@ -261,11 +313,12 @@
 		data2 <- data
 		data2$Dummy <- factor(1)
 		data2 <- groupedData(lnCVR_es~1 |Dummy, data2)
-		modCVR <- lme(lnCVR_es ~ category + background1 + mating + parenting, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~species-1))), weights = varFixed(~VlnCVR), control=lmeControl(sigma = 1), method = "REML", data = data2)
+		modnameCVRMeta <- rma.mv(lnCVR_es ~ category + background1 + mating + breeding, V = VlnCVR, random = list(~1|study, ~1|species), method = "REML", data = data2)
+		modCVR <- lme(lnCVR_es ~ category + background1 + mating + breeding, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~species-1))), weights = varFixed(~VlnCVR), control=lmeControl(sigma = 1), method = "REML", data = data2)
 		summary(modCVR)
 
 		# Get marginal / unconditional estimates from the model.
-		marginalCVR <- marginalize(mod = modCVR, vars = c("category", "background1", "mating", "parenting"))
+		marginalCVR <- marginalize(mod = modCVR, vars = c("category", "background1", "mating", "breeding"))
 		margTableCVR <- margTable(marginalCVR)
 		margTableCVR$N <- N
 		margTableCVR$obs <- 1:nrow(margTableCVR)
@@ -285,37 +338,55 @@
        # Some mixing problems with phylogeny. Use species, which is pretty much the same. Actually, mixing problems with species too! Probably confound with study, but still different than metafor. Actually, I've figured this out. Turns out that when using mev argument this causes major mixing problems for species and phylogeny. This is WEIRD! So, added to ginverse, works pretty good and effective sample size for phylo goes up to normal. Not sure why mixing is compromised when using mev?? This problem above is NOT solved by using parameter expanded priors which should mix better than Inverse-Wishart.
 	       modMCMCglmmRR <- MCMCglmm(lnRR_2 ~ 1, random = ~study + phylo + esID, ginverse = list(phylo = Ainv, esID = Vmat), data = data, prior = prior, nitt = 500000, thin = 100, pr = TRUE, family = "gaussian", verbose = FALSE)
 
-	       modMCMCglmmRR <- MCMCglmm(lnRR_2 ~ 1, random = ~study + phylo, mev=data$v.lnRR, data = data, nitt = 100000, thin = 100, pr = TRUE, family = "gaussian", verbose = FALSE)
-	       summary(modMCMCglmmRR)
-	       I2(modMCMCglmmRR, ME = "esID", v = data$v.lnRR, phylo = "phylo")
+	       #modMCMCglmmRR <- MCMCglmm(lnRR_2 ~ 1, random = ~study + phylo, mev=data$v.lnRR, data = data, nitt = 100000, thin = 100, pr = TRUE, family = "gaussian", verbose = FALSE)
+	       #summary(modMCMCglmmRR)
+	       I2(modMCMCglmmRR, v = data$v.lnRR, phylo = "phylo")
 
        # Now that we have a multi-level model that estimates sources of non-independence and accounts for sampling error variance (esID), we can now extract residuals that are marginalized over the random effects. q
-	       fitted <- predict(modMCMCglmmRR, marginal = ~esID) # This nearly matches perfectly with metafor
-	       fitted <- predict(modMCMCglmmRR) # Slightly confusing because default is that all RE are marginalised.....object$Random$formula, which matches perfectly with metafor resi
-	       fitted <- predict(modMCMCglmmRR, marginal = ~study + phylo) # This should ignore esID, assuming we have accounted for this in the model already anyway...but marginalise over all study and phylo effects....so 
+	       fitted <- predict(modMCMCglmmRR, marginal = ~esID) # This nearly matches perfectly with metafor. We want this though as the residuals are not independent! Because. This excludes the esID from predictions because its fixed as part of the model and conditions predictions on phylogeny and study. These are meta-analytic residual.
+	       #fitted <- predict(modMCMCglmmRR) # Slightly confusing because default is that all RE are marginalized.....object$Random$formula, which matches perfectly with metafor resi. Marginalizing here means that you do NOT include the BLUPS from random effects. So, these are fixed effects predictions only and explains why this matches metafor.
+	       #fitted <- predict(modMCMCglmmRR, marginal = ~study + phylo) # This should ignore esID, assuming we have accounted for this in the model already anyway...but marginalize over all study and phylo effects....so - Marginalizing here means that you do NOT include the BLUPS here. So, these are basically fixed effects predictions 
 	       e <- data$lnRR_2 - fitted
 
        # Now grab the residuals from metafor to find out whether these residuals have also marginalised over the random effects in the model.
-		   reslnRR <- residuals(modRR_int)
+		   #reslnRR <- residuals(modRR_int)
 		   precisionlnRR <- 1/sqrt(data$v.lnRR)
 	   
 	   # Test that MCMCglmm and metafor are giving the same stuff
-		   cor.test(e, reslnRR)
+		   #cor.test(e, reslnRR)
 
 	   # Egger's regression
-		   WlnRR <- reslnRR*precisionlnRR
+		   #WlnRR <- reslnRR*precisionlnRR
 		   WlnRR <- e*precisionlnRR
 
 		   eggerlnRR <- lm(WlnRR ~ precisionlnRR)
 		   summary(eggerlnRR)
+
+		   # Needed for funnel plots
+		   metaResidRR <- rma(yi=e, vi = data$v.lnRR)
+		   tfRR <-trimfill(metaResidRR)
 	  
 	# Eggers regression for lnCVR. Modified version. Residuals should remove non-independence from multi-level model.
-	   reslnCVR <- residuals(modCVR_int)
+		VmatCVR <- as(solve(diag(data$VlnCVR)), "dgCMatrix")
+		colnames(VmatCVR) <- rownames(VmatCVR) <- data$esID
+	 
+	 # Re-fit the intercept only multi-level meta-analytic model. 
+	 modMCMCglmmCVR <- MCMCglmm(lnCVR_es ~ 1, random = ~study + phylo + esID, ginverse = list(phylo = Ainv, esID = VmatCVR), data = data, prior = prior, nitt = 500000, thin = 100, pr = TRUE, family = "gaussian", verbose = FALSE)
+
+	 # Extract residuals from model were predictions are conditioned on study and phylogenetic effects (BLUPS). Marginalise over the esID as this is fixed.
+	 	fittedCVR <- predict(modMCMCglmmRR, marginal = ~esID)
+	   reslnCVR <- data$lnCVR_es - fittedCVR
+
+	 # Eggers regression
 	   precisionlnCVR <- 1/sqrt(data$VlnCVR)
 	   WlnCVR <- reslnCVR*precisionlnCVR
 
 	   eggerlnCVR <- lm(WlnCVR ~ precisionlnCVR)
 	   summary(eggerlnCVR)
+
+	   # Needed for funnel plots. Take residuals and use as normal effect sizes (are independent)
+		   metaResidCRR <- rma(yi=reslnCVR, vi = data$VlnCVR)
+		   tfCVR <-trimfill(metaResidCRR)
 
 # 8. Figures
 #----------------------------------------------------------------------------#
@@ -324,12 +395,12 @@
 			par(mfrow = c(1,2), mar = c(4, 5, 1, 1))
 			
 			#lnCVR
-	   		funnel(modRR_int, yaxis = "seinv", ylab = "Precision (1/SE)",xlab = "lnRR", pch = 21, digits = 0, las = 1, level = c(95, 99), back = "gray90")
+	   		funnel(metaResidRR, yaxis = "seinv", ylab = "Precision (1/SE)",xlab = "lnRR", pch = 21, digits = 0, las = 1, level = c(95, 99), back = "gray90")
 			abline(v = 0, col = "red")
 			mtext("A)", adj = -0.25, padj = 0.5)	
 		
 			#lnCVR
-			funnel(modCVR_int, yaxis = "seinv", ylab = "", xlab = "lnCVR", pch = 21, digits = 0, las = 1, level = c(95, 99), back = "gray90")
+			funnel(metaResidCRR, yaxis = "seinv", ylab = "", xlab = "lnCVR", pch = 21, digits = 0, las = 1, level = c(95, 99), back = "gray90")
 			abline(v = 0, col = "red")
 			mtext("B)", adj = -0.25, padj = 0.5)	
 		dev.off()		
@@ -342,7 +413,7 @@
 			par(mfrow = c(1,2),  bty = "n", mar = c(5,10,2,1))
 
 			labels <- tolower(rownames(coefTabRR <- margTableRR)) #toupper converts to caps, whereas tolower converts all to lower case. Useful function.
-			yRef <- c(1:4, 7,8, 11:13, 16:18)
+			yRef <- c(1:4, 7,8, 11:13, 16:17)
 			#Labels <- c("Behaviour", "Development","Life History", "Physiology", "Lab", "Wild", "Ectotherm", "Endotherm", "Arid", "Artificial", "Global", "Temperate", "Tropical", "Females larger", "Males larger", "No difference", "Adults", "Juveniles", "Mixed", "Unknown", "Polygyny", "Promiscuity", "Monogamy", "Unknown", "Both", "Female", "None", "Iteroparous", "Semelparous")
 			#lnRR
 			plot(obs~effect,  type = "n", xlim = c(-0.6, 0.6), ylim = c(0, max(yRef)+2), xlab = "lnRR", ylab = "", data = coefTabRR, yaxt='n', cex.lab = 1.5)
@@ -353,8 +424,8 @@
 			arrows(x0=coefTabRR[-30,"effect"] , y0= yRef, x1= coefTabRR[-30,"upper"] , y1 = yRef, length = 0, angle = 90)
 			mtext(side  = 2, labels, at = yRef, las = 1)
 			mtext(side  = 2, expression(bold("A)")), at = max(yRef)+2, line = 6, las = 1, cex = 1.5, padj = -1.0)
-			labRef <- c(5,9,14,19) #labRef <- c(5,9,13,20,25,31,37,42,46)
-			titles <- c("Trait Type", "Lab vs. Wild", "Mating Syst.", "Parental care")
+			labRef <- c(5,9,14,18) #labRef <- c(5,9,13,20,25,31,37,42,46)
+			titles <- c("Trait Type", "Study Envir.", "Mating Syst.", "Breeding")
 			mtext(side  = 2, titles, font = 2, at = labRef, las = 1, cex = 1)
 			text("Males 'faster'", x = -0.3, y = max(yRef)+2, cex = 1)
 			text("Females 'faster'", x = +0.3, y = max(yRef)+2, cex = 1)
@@ -375,3 +446,13 @@
 			text("Females high V", x = +0.3, y = max(yRef)+2, cex = 1)
 	dev.off()
 
+pdf(height = 7, width = 7, file = "./output/figures/ FigureS1.pdf")
+# Check out mean-variance relationships in each sex
+		par(mar = c(5,5,1,1))
+		plot(log(Mean_M) ~ log(SD_M), ylab = "log(Mean)", xlab = "log(SD)", data = data, col = "blue", las = 1, cex = 1.5, cex.axis = 1.5, cex.lab = 1.5)
+		points(log(Mean_F) ~ log(SD_F),  data = data, col = "red", cex = 1.5)
+		points(y = c(8, 7), x = c(-2, -2), col = c("blue", "red"), cex = 1.5)
+		text(c("Males", "Females"), y = c(7.9, 6.9), x = c(-1.8, -1.8), adj = c(0,0))
+		box()
+		#abline(a = 0, b = 1)
+dev.off()
