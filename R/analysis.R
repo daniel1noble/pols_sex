@@ -249,7 +249,7 @@
 		coefRRTable1B <- round_df(data.frame(Est. = modnameRRDep$b, LCI = modnameRRDep$ci.lb, LCI = modnameRRDep$ci.ub), digits =3)
 		
 		TableS1RR <- rbind(coefRRTable1A, coefRRTable1B)
-		write.csv(TableS1RR, "./output/tables/TableS1RR.csv")
+		write.csv(TableS1RR, "./output/tables/TableS1RRBreeding.csv")
 
 		#Predictions for each trait category. 
 			newDat <- expand.grid(list(0, unique(data$background1), unique(data$category),unique(data$mating), unique(data$breeding), 1, "M205"), stringsAsFactors = TRUE)
@@ -295,7 +295,7 @@
 		coefCVRTable1B <- round_df(data.frame(Est. = modnameCVRDep$b, LCI = modnameCVRDep$ci.lb, LCI = modnameCVRDep$ci.ub), digits =3)
 		
 		TableS1CVR <- rbind(coefCVRTable1A, coefCVRTable1B)
-		write.csv(TableS1CVR, "./output/tables/TableS1CVR.csv")
+		write.csv(TableS1CVR, "./output/tables/TableS1CVR_breed.csv")
 
 		# Re-fit in lme. Try a little trick: https://biostatmatt.com/archives/2718
 		data2 <- data
