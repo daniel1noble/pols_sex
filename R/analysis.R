@@ -122,18 +122,6 @@
 # 3. Create covariance matrix
 #----------------------------------------------------------------------------#
 	# Phylogenetic correlation matrix
-	# List of species
-	#spp <- gsub(" ", "_", spp)
-	#write.csv(spp, "./output/sppList.csv")
-
-	# Pull species from the OTL database
-	#tree <- tnrs_match_names(names = spp)
-
-	#Cerate a tree based on IDs found. Problem here were "4124117" is just not found. Function does not work when included. This maybe dude to taxonomy change. Synonym of Egernia whitii is Liopholis whitti. Try changing this. 
-	#tl <- tol_induced_subtree(ott_ids=tree$ott_id) 
-	#write.tree(tl, "./output/tree")
-
-	#Note that above code is only needed once to grab taxa and generate the tree. Now we can just import the tree file. 
 	#Remove ott labels on end to make sure to matches species in dataset
 	phylo <- read.tree("./output/tree")
 	phylo$tip.label <- gsub("_ott.+", "", phylo$tip.label)
@@ -320,23 +308,15 @@
        # Some mixing problems with phylogeny. Use species, which is pretty much the same. Actually, mixing problems with species too! Probably confound with study, but still different than metafor. Actually, I've figured this out. Turns out that when using mev argument this causes major mixing problems for species and phylogeny. This is WEIRD! So, added to ginverse, works pretty good and effective sample size for phylo goes up to normal. Not sure why mixing is compromised when using mev?? This problem above is NOT solved by using parameter expanded priors which should mix better than Inverse-Wishart.
 	       modMCMCglmmRR <- MCMCglmm(lnRR_2 ~ 1, random = ~study + phylo + esID, ginverse = list(phylo = Ainv, esID = Vmat), data = data, prior = prior, nitt = 500000, thin = 100, pr = TRUE, family = "gaussian", verbose = FALSE)
 
-	       #modMCMCglmmRR <- MCMCglmm(lnRR_2 ~ 1, random = ~study + phylo, mev=data$v.lnRR, data = data, nitt = 100000, thin = 100, pr = TRUE, family = "gaussian", verbose = FALSE)
-	       #summary(modMCMCglmmRR)
 	       I2(modMCMCglmmRR, v = data$v.lnRR, phylo = "phylo")
 
        # Now that we have a multi-level model that estimates sources of non-independence and accounts for sampling error variance (esID), we can now extract residuals that are marginalized over the random effects. q
-	       fitted <- predict(modMCMCglmmRR, marginal = ~esID) # This nearly matches perfectly with metafor. We want this though as the residuals are not independent! Because. This excludes the esID from predictions because its fixed as part of the model and conditions predictions on phylogeny and study. These are meta-analytic residual.
-	       #fitted <- predict(modMCMCglmmRR) # Slightly confusing because default is that all RE are marginalized.....object$Random$formula, which matches perfectly with metafor resi. Marginalizing here means that you do NOT include the BLUPS from random effects. So, these are fixed effects predictions only and explains why this matches metafor.
-	       #fitted <- predict(modMCMCglmmRR, marginal = ~study + phylo) # This should ignore esID, assuming we have accounted for this in the model already anyway...but marginalize over all study and phylo effects....so - Marginalizing here means that you do NOT include the BLUPS here. So, these are basically fixed effects predictions 
+	       fitted <- predict(modMCMCglmmRR, marginal = ~esID) 
 	       e <- data$lnRR_2 - fitted
 
        # Now grab the residuals from metafor to find out whether these residuals have also marginalised over the random effects in the model.
-		   #reslnRR <- residuals(modRR_int)
 		   precisionlnRR <- 1/sqrt(data$v.lnRR)
-	   
-	   # Test that MCMCglmm and metafor are giving the same stuff
-		   #cor.test(e, reslnRR)
-
+	  
 	   # Egger's regression
 		   #WlnRR <- reslnRR*precisionlnRR
 		   WlnRR <- e*precisionlnRR
@@ -395,9 +375,9 @@
 	pdf(width = 12.678414, height = 5.506608, file = "./output/figures/Figure2.pdf")
 			par(mfrow = c(1,2),  bty = "n", mar = c(5,10,2,1))
 
-			labels <- tolower(rownames(coefTabRR <- margTableRR)) #toupper converts to caps, whereas tolower converts all to lower case. Useful function.
+			labels <- tolower(rownames(coefTabRR <- margTableRR)) 
 			yRef <- c(1:4, 7,8, 11:13, 16:17)
-			#Labels <- c("Behaviour", "Development","Life History", "Physiology", "Lab", "Wild", "Ectotherm", "Endotherm", "Arid", "Artificial", "Global", "Temperate", "Tropical", "Females larger", "Males larger", "No difference", "Adults", "Juveniles", "Mixed", "Unknown", "Polygyny", "Promiscuity", "Monogamy", "Unknown", "Both", "Female", "None", "Iteroparous", "Semelparous")
+			
 			#lnRR
 			plot(obs~effect,  type = "n", xlim = c(-0.6, 0.6), ylim = c(0, max(yRef)+2), xlab = "lnRR", ylab = "", data = coefTabRR, yaxt='n', cex.lab = 1.5)
 			abline(v = 0, lty = 2)
@@ -437,7 +417,7 @@
 			points(y = c(8, 7), x = c(-2, -2), col = c("blue", "red"), cex = 1.5)
 			text(c("Males", "Females"), y = c(7.9, 6.9), x = c(-1.8, -1.8), adj = c(0,0))
 			box()
-			#abline(a = 0, b = 1)
+			
 	dev.off()
 
 
