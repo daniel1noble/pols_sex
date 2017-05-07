@@ -387,9 +387,10 @@
 			mtext("B)", adj = -0.25, padj = 0.5)	
 		dev.off()		
 	
-		pdf(height = 7, width = 7, file = "./output/figures/phylogeny.pdf")
-		  	plot(phylo, cex = 0.85)
-		dev.off()
+	pdf(height = 7, width = 7, file = "./output/figures/phylogeny.pdf")
+		  	par(mar = c(1,1,1,1))
+		  	plot(phylo, cex = 0.85)  #type = "fan"
+	dev.off()
 
 	pdf(width = 12.678414, height = 5.506608, file = "./output/figures/Figure2.pdf")
 			par(mfrow = c(1,2),  bty = "n", mar = c(5,10,2,1))
