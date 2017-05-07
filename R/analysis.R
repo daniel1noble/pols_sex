@@ -154,7 +154,7 @@
 	 VmatRR <- VmCovMat(data, "v.lnRR", "dependence")
 	VmatCVR <- VmCovMat(data, "VlnCVR", "dependence")
 	
-# 4. Multi-level meta-analytic models (MLMA) - intercept only for heterogeneity 
+# 4. Multi-level meta-analytic models (MLMA) - intercept only for hetero. 
 #----------------------------------------------------------------------------#
 	# Study and species level random effects are mostly confounded so study will probably capture most variation anyway, but worth attempting to estimate
 
@@ -227,7 +227,7 @@
 		lnCVR <- data.frame(rbind(PhysCVRI2, DevCVRI2, BehavCVRI2, LHCVRI2))
 		
 # 5. Marginal estimates / unconditional means for the groups. 
-#----------------------------------------------
+#----------------------------------------------------------------------------#
 	# Run some "full" models with the relevant variables discussed. Run in lme as we can then use the effects package
 	# Run model in MCMCglmm
 	       data$phylo <- gsub(" ", "_", data$species)
@@ -373,7 +373,7 @@
 # 7. Figures
 #----------------------------------------------------------------------------#
 	# Do some plotting. Funnel plots
-	pdf(height = 4.519824, width = 9.938326, file = "./output/figures/funnels.pdf")
+	pdf(height = 4.519824, width = 9.938326, file = "./output/figures/figure3.pdf")
 			par(mfrow = c(1,2), mar = c(4, 5, 1, 1))
 			
 			#lnCVR
@@ -387,7 +387,7 @@
 			mtext("B)", adj = -0.25, padj = 0.5)	
 		dev.off()		
 	
-	pdf(height = 7, width = 7, file = "./output/figures/phylogeny.pdf")
+	pdf(height = 7, width = 7, file = "./output/figures/figure1.pdf")
 		  	par(mar = c(1,1,1,1))
 		  	plot(phylo, cex = 0.85)  #type = "fan"
 	dev.off()
@@ -429,32 +429,32 @@
 			text("Females high V", x = +0.3, y = max(yRef)+2, cex = 1)
 	dev.off()
 
-pdf(height = 7, width = 7, file = "./output/figures/ FigureS1.pdf")
-	# Check out mean-variance relationships in each sex
-		par(mar = c(5,5,1,1))
-		plot(log(Mean_M) ~ log(SD_M), ylab = "log(Mean)", xlab = "log(SD)", data = data, col = "blue", las = 1, cex = 1.5, cex.axis = 1.5, cex.lab = 1.5)
-		points(log(Mean_F) ~ log(SD_F),  data = data, col = "red", cex = 1.5)
-		points(y = c(8, 7), x = c(-2, -2), col = c("blue", "red"), cex = 1.5)
-		text(c("Males", "Females"), y = c(7.9, 6.9), x = c(-1.8, -1.8), adj = c(0,0))
-		box()
-		#abline(a = 0, b = 1)
-dev.off()
+	pdf(height = 7, width = 7, file = "./output/figures/ FigureS1.pdf")
+		# Check out mean-variance relationships in each sex
+			par(mar = c(5,5,1,1))
+			plot(log(Mean_M) ~ log(SD_M), ylab = "log(Mean)", xlab = "log(SD)", data = data, col = "blue", las = 1, cex = 1.5, cex.axis = 1.5, cex.lab = 1.5)
+			points(log(Mean_F) ~ log(SD_F),  data = data, col = "red", cex = 1.5)
+			points(y = c(8, 7), x = c(-2, -2), col = c("blue", "red"), cex = 1.5)
+			text(c("Males", "Females"), y = c(7.9, 6.9), x = c(-1.8, -1.8), adj = c(0,0))
+			box()
+			#abline(a = 0, b = 1)
+	dev.off()
 
 
-pdf(width=6.907489, height = 5.859031, file = "./output/figures/pred.Fig.pdf")
-	par(bty = "n", mar = c(5,10,2,1))
-			predictions$yRef <- c(c(1:(0.5*(nrow(predictions)))), c(15:(nrow(predictions)+2)))
-			Labels <- as.character(interaction(predictions$category, predictions$mating))
-			#lnRR
-			plot(yRef~fit,  type = "n", xlim = c(-0.5, 0.5), ylim = c(0, max(yRef)+2), xlab = "Predicted lnRR", ylab = "", data = predictions, yaxt='n', cex.lab = 1.5)
-			abline(v = 0, lty = 2, col = "gray90")
-			
-			points(predictions$yRef~predictions[, "fit"], pch = 16) #-30 from other table
-			arrows(x0=predictions[,"fit"] , y0= yRef, x1= predictions[,"lwr"] , y1 = yRef, length = 0, angle = 90)
-			arrows(x0=predictions[,"fit"] , y0= yRef, x1= predictions[,"upr"] , y1 = yRef, length = 0, angle = 90)
+	pdf(width=6.907489, height = 5.859031, file = "./output/figures/pred.Fig.pdf")
+		par(bty = "n", mar = c(5,10,2,1))
+				predictions$yRef <- c(c(1:(0.5*(nrow(predictions)))), c(15:(nrow(predictions)+2)))
+				Labels <- as.character(interaction(predictions$category, predictions$mating))
+				#lnRR
+				plot(yRef~fit,  type = "n", xlim = c(-0.5, 0.5), ylim = c(0, max(yRef)+2), xlab = "Predicted lnRR", ylab = "", data = predictions, yaxt='n', cex.lab = 1.5)
+				abline(v = 0, lty = 2, col = "gray90")
+				
+				points(predictions$yRef~predictions[, "fit"], pch = 16) #-30 from other table
+				arrows(x0=predictions[,"fit"] , y0= yRef, x1= predictions[,"lwr"] , y1 = yRef, length = 0, angle = 90)
+				arrows(x0=predictions[,"fit"] , y0= yRef, x1= predictions[,"upr"] , y1 = yRef, length = 0, angle = 90)
 
-			text(x = 0, y = 28, "iteroparous", font = 2)
-			text(x = 0, y = 13, "semelparous", font = 2)
-			mtext(side  = 2, Labels, at = yRef, las = 1, cex = 0.8)
-dev.off()			
+				text(x = 0, y = 28, "iteroparous", font = 2)
+				text(x = 0, y = 13, "semelparous", font = 2)
+				mtext(side  = 2, Labels, at = yRef, las = 1, cex = 0.8)
+	dev.off()			
 
