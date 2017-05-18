@@ -1,5 +1,5 @@
 #----------------------------------------------------------------------------#
-# Meta-Analysis of sex differences in behaviour, physiology to test POLs
+# Meta-Analysis of sex differences in behaviour, physiology to test sex-dependent POL
 # Authors: Maja Tarka, Anja Günther, Petri Niemela, Shinichi Nakagawa and Daniel Noble
 # 2017-04-03 15:53:29 AEST
 #----------------------------------------------------------------------------#
