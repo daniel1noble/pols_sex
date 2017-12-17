@@ -28,22 +28,13 @@
 
 	v_lnCVR<-function(CMean, CSD, CN, EMean, ESD, EN, Equal.E.C.Corr=TRUE, repeated.control = FALSE, Control.IDs){
 		
-		if(repeated.control == TRUE){
-				mean.control.for.cor<-CMean[match(unique(Control.IDs), Control.IDs)]
-				sd.control.for.cor<-CSD[match(unique(Control.IDs), Control.IDs)]
-			}
-			else{
-				mean.control.for.cor<-CMean
-				sd.control.for.cor<-CSD
-			}
-		
 		if(Equal.E.C.Corr==TRUE){
-				mvcorr<-cor.test(log(c(mean.control.for.cor, EMean)), log(c(sd.control.for.cor, ESD)))$estimate
+				mvcorr<-cor.test(log(c(CMean, EMean)), log(c(CSD, ESD)))$estimate
 				S2<- CSD^2 / (CN * (CMean^2)) + 1 / (2 * (CN - 1)) - 2 * mvcorr * sqrt((CSD^2 / (CN * (CMean^2))) * (1 / (2 * (CN - 1)))) + ESD^2 / (EN * (EMean^2)) + 1 / (2 * (EN - 1)) - 2 * mvcorr * sqrt((ESD^2 / (EN * (EMean^2))) * (1 / (2 * (EN - 1))))
 			}
 			else{
-				Cmvcorr<-cor.test(log(mean.control.for.cor), log(sd.control.for.cor))$estimate
-				Emvcorr<-cor.test(log(EMean), (ESD))$estimate
+				Cmvcorr<-cor.test(log(CMean), log(CSD))$estimate
+				Emvcorr<-cor.test(log(EMean), log(ESD))$estimate
 		
 				S2<- CSD^2 / (CN * (CMean^2)) + 1 / (2 * (CN - 1)) - 2 * Cmvcorr * sqrt((CSD^2 / (CN * (CMean^2))) * (1 / (2 * (CN - 1)))) + ESD^2 / (EN * (EMean^2)) + 1 / (2 * (EN - 1)) - 2 * Emvcorr * sqrt((ESD^2 / (EN * (EMean^2))) * (1 / (2 * (EN - 1))))
 			}
