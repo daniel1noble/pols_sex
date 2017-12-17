@@ -8,7 +8,7 @@
 		rm(list=ls())
 
 	# load functions & libraries
-		source("./R/func.R")
+		source("./pols_sex/R/func.R")
 		library(lattice)
 		library(phytools)
 		library(nlme)
@@ -23,11 +23,14 @@
 		library(MuMIn)
 
 	# load data
-		data <- read.csv("./data/POLSsexdb_merged_20170315_recat.csv", stringsAsFactors = FALSE)
+		data <- read.csv("./pols_sex/data/POLS_sex_db_20171123.csv", stringsAsFactors = FALSE)
 
 # 1. Data Exploration & Processing
 #----------------------------------------------------------------------------#
-	# Exclude missingness. 
+	# Exclude missingness.
+		data1 <-data[data$include_1 == 1,]  
+		data2 <-data[data$include_2 == 1,] 
+		
 		data <- data[complete.cases(data$SD_M, data$SD_F, data$M_n, data$F_n),]
 		dim(data)
 
