@@ -21,6 +21,7 @@
 		library(devtools)
 		library(MCMCglmm)
 		library(MuMIn)
+		library(corrplot)
 
 	# load data
 		data <- read.csv("./pols_sex/data/POLS_sex_db_20171123.csv", stringsAsFactors = FALSE)
@@ -31,8 +32,10 @@
 		data1 <-data[data$include_1 == 1,]  
 		data2 <-data[data$include_2 == 1,] 
 		
-		data <- data[complete.cases(data$SD_M, data$SD_F, data$M_n, data$F_n),]
-		dim(data)
+		#data <- data[complete.cases(data$SD_M, data$SD_F, data$M_n, data$F_n),]
+		#dim(data)
+
+		data = data1
 
 	#Calculate effect sizes and explore some more.
 		#lnRR
@@ -70,12 +73,19 @@
 		data$background1 <- ifelse(data$background == "semiwild", "wild", data$background)
 		data$background1 <- ifelse(data$background1 == "domestic", "lab", data$background1)
 
+
 	# Check out species list
 		#resolve species synonymn for Egernia whitii. Also, Sus scrofa subspecies can just be re-named to species so it is not dropped from Phylo construction.
 		data$species <- ifelse(data$species == "Egernia whitii", "Liopholis whitii", data$species)
 		data$species <- ifelse(data$species == "Sus scrofa domestica", "Sus scrofa", data$species)
+		data$species <- ifelse(data$species == "Melospiza g. nigrescens", "Melospiza georgiana", data$species)
+		data$species <- ifelse(data$species == "Melospiza g. georgiana", "Melospiza georgiana", data$species)
+		data$species <- ifelse(data$species == "Lagopus muta hyperborea", "Lagopus muta", data$species)
 
+		data$species <- trimws(data$species)
+		  
 		  spp <- unique(data$species)
+		  spp <- gsub(" ", "_", spp)
 		 nSpp <- length(spp)
 		taxon <- unique(data$taxon)
 
@@ -125,8 +135,17 @@
 # 3. Create covariance matrix
 #----------------------------------------------------------------------------#
 	# Phylogenetic correlation matrix
+
+	# Build tree
+		resolve_names <- tnrs_match_names(spp)
+		tree <- tol_induced_subtree(ott_ids = resolve_names$ott_id)
+
+		plot(tree, no.margin = TRUE)
+
+		write.tree(tree, file="./pols_sex/output/tree_new")
+
 	#Remove ott labels on end to make sure to matches species in dataset
-	phylo <- read.tree("./output/tree")
+	phylo <- read.tree("./pols_sex/output/tree_new")
 	phylo$tip.label <- gsub("_ott.+", "", phylo$tip.label)
 	phylo <- makeNodeLabel(phylo) 
 	is.binary.tree(phylo)
@@ -138,6 +157,9 @@
 	phylo_cor <- vcv(phylo_BL, corr = TRUE)
 	names <- gsub("_", " ", rownames(phylo_cor))
 	rownames(phylo_cor) <- colnames(phylo_cor) <- names
+
+	# Check out correlation matrix
+	corrplot(phylo_cor, tl.col = "black", tl.cex = 0.8)
 
 	Ainv <- inverseA(phylo_BL, nodes = "ALL", scale = TRUE)$Ainv
 
