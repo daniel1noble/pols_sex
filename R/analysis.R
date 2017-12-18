@@ -35,7 +35,7 @@
 		#data <- data[complete.cases(data$SD_M, data$SD_F, data$M_n, data$F_n),]
 		#dim(data)
 
-		data = data1
+		data = data2
 
 	#Calculate effect sizes and explore some more.
 		#lnRR
@@ -72,6 +72,7 @@
 
 		data$background1 <- ifelse(data$background == "semiwild", "wild", data$background)
 		data$background1 <- ifelse(data$background1 == "domestic", "lab", data$background1)
+		data$background1 <- ifelse(data$background1 == "captive", "lab", data$background1)
 
 
 	# Check out species list
@@ -113,6 +114,8 @@
 	# Get N for all predictors
 		vars <- c("category" , "background1" , "mating" , "breeding")
 
+		table(data$category)
+
 		N <- c()
 		for(i in 1:length(vars)){
 			samp <- as.vector(t(table(data[,vars[i]])))
@@ -142,11 +145,14 @@
 
 	# Build tree
 		resolve_names <- tnrs_match_names(spp)
-		         tree <- tol_induced_subtree(ott_ids = resolve_names$ott_id)
+		  tree <- tol_induced_subtree(ott_ids = resolve_names$ott_id)
+		  tree$tip.label <- gsub("_ott.+", "", tree$tip.label)
 
-		plot(tree, no.margin = TRUE, type = "radial")
-
-		write.tree(tree, file="./pols_sex/output/tree_new")
+	  pdf(width = 5.982379, height = 6.237885, file = "tree_new_data2.pdf")
+		par(mar=c(1,1,1,1))
+		plot(tree, no.margin = TRUE, type = "phylogram", cex = 0.5)
+	  dev.off()
+		write.tree(tree, file="./pols_sex/output/tree_new_data2")
 
 		# Now that we have matched species in ROTL, we need to convert the names of these species to the identified ID's in rotl to ensure the phylo matrix and species names match.
 		data_names <- gsub("_", " ", firstup(resolve_names$search_string))
@@ -161,29 +167,29 @@
 		data$spp_rotl <- spp_rotl
 
 	#Remove ott labels on end to make sure to matches species in dataset
-	phylo <- read.tree("./pols_sex/output/tree_new")
-	phylo$tip.label <- gsub("_ott.+", "", phylo$tip.label)
-	phylo <- makeNodeLabel(phylo) 
-	is.binary.tree(phylo)
+		phylo <- read.tree("./pols_sex/output/tree_new_data2")
+		phylo$tip.label <- gsub("_ott.+", "", phylo$tip.label)
+		phylo <- makeNodeLabel(phylo) 
+		is.binary.tree(phylo)
 
 	# Compute branch lengths
-	phylo_BL <- compute.brlen(phylo, method = "Grafen", power = 0.5) # Note that larger values of power produce models with lower AICc estimates, but they are all pretty similar. Estimate of phylo variance increases with smaller power estimates. But, not greatly.
+		phylo_BL <- compute.brlen(phylo, method = "Grafen", power = 0.5) # Note that larger values of power produce models with lower AICc estimates, but they are all pretty similar. Estimate of phylo variance increases with smaller power estimates. But, not greatly.
 
 	# Create phylogenetic correlation matrix. For metafor. Make sure names match with species. 
-	phylo_cor <- vcv(phylo_BL, corr = TRUE)
-	names <- gsub("_", " ", rownames(phylo_cor))
-	rownames(phylo_cor) <- colnames(phylo_cor) <- names
+		phylo_cor <- vcv(phylo_BL, corr = TRUE)
+		names <- gsub("_", " ", rownames(phylo_cor))
+		rownames(phylo_cor) <- colnames(phylo_cor) <- names
 
 	# Check out correlation matrix
-	corrplot(phylo_cor, tl.col = "black", tl.cex = 0.8)
+		corrplot(phylo_cor, tl.col = "black", tl.cex = 0.8)
 
-	Ainv <- inverseA(phylo_BL, nodes = "ALL", scale = TRUE)$Ainv
+		Ainv <- inverseA(phylo_BL, nodes = "ALL", scale = TRUE)$Ainv
 
 	# Create within study dependency and test impacts with sensitivity analysis. Assume r = 0.5 to estimate the covariance between two effects.
-	 VmatRR <- VmCovMat(data, "v.lnRR", "Dependency.temporal.level")
-	VmatCVR <- VmCovMat(data, "VlnCVR", "Dependency.temporal.level")
+		 VmatRR <- VmCovMat(data, "v.lnRR", "Dependency.temporal.level")
+		VmatCVR <- VmCovMat(data, "VlnCVR", "Dependency.temporal.level")
 
-	corrplot(as.matrix(VmatCVR), tl.col = "black", tl.cex = 0.8, is.corr = FALSE, type = "lower", method = "color")	
+		corrplot(as.matrix(VmatCVR), tl.col = "black", tl.cex = 0.8, is.corr = FALSE, type = "lower", method = "color")	
 
 # 4. Multi-level meta-analytic models (MLMA) - intercept only for hetero. 
 #----------------------------------------------------------------------------#
@@ -270,17 +276,17 @@
 	# Note the below model, however, assumes now that the residual variance is fixed! So we must remove the estimation of the observation-level variance, or ADD it into the lme fit to get the same results between metafor and lme. But also problems including nested random effects in lme: https://biostatmatt.com/archives/2718 & here: https://stat.ethz.ch/pipermail/r-help/2002-September/025067.html.
 
 	#lnRR
-		modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = v.lnRR, random = list(~1|study, ~1|species), method = "REML", R = list(species = phylo_cor), data = data)
-
+		modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = v.lnRR, random = list(~1|study, ~1|spp_rotl), method = "REML", R = list(spp_rotl = phylo_cor), data = data)
+		AICc(modnameRR)
 		coefRRTable1A <- round_df(data.frame(Est. = modnameRR$b, LCI = modnameRR$ci.lb, LCI = modnameRR$ci.ub), digits = 3)
 
 		#Sensitivity Analysis. Covariance matrix.
-		modnameRRDep <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = VmatRR, R = list(species = phylo_cor), random = list(~1|study, ~1|species), method = "REML", data = data)
+		modnameRRDep <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = VmatRR, R = list(spp_rotl = phylo_cor), random = list(~1|study, ~1|spp_rotl), method = "REML", data = data)
 		AICc(modnameRRDep)
 		coefRRTable1B <- round_df(data.frame(Est. = modnameRRDep$b, LCI = modnameRRDep$ci.lb, LCI = modnameRRDep$ci.ub), digits =3)
 		
 		TableS1RR <- rbind(coefRRTable1A, coefRRTable1B)
-		write.csv(TableS1RR, "./output/tables/TableS1RRBreeding.csv")
+		write.csv(TableS1RR, "./pols_sex/output/tables/TableS1RRBreeding_r1.csv")
 
 		#Predictions for each trait category. 
 			newDat <- expand.grid(list(0, unique(data$background1), unique(data$category),unique(data$mating), unique(data$breeding), 1, "M205"), stringsAsFactors = TRUE)
@@ -300,8 +306,8 @@
 		data2 <- data
 		data2$Dummy <- factor(1)
 		data2 <- groupedData(lnRR_2~1 |Dummy, data2)
-		modnameRRMeta <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = v.lnRR, random = list(~1|study, ~1|species), method = "REML", data = data2)
-		modRR <- lme(lnRR_2 ~ category + background1 + mating + breeding, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~species-1))), weights = varFixed(~v.lnRR), control=lmeControl(sigma = 1), method = "REML", data = data2)
+		modnameRRMeta <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = v.lnRR, random = list(~1|study, ~1|spp_rotl), method = "REML", data = data2)
+		modRR <- lme(lnRR_2 ~ category + background1 + mating + breeding, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~spp_rotl-1))), weights = varFixed(~v.lnRR), control=lmeControl(sigma = 1), method = "REML", data = data2)
 		summary(modRR)
 
 		# Get marginal / unconditional mean estimates from the model.
@@ -452,7 +458,7 @@
 			text("Females high V", x = +0.3, y = max(yRef)+2, cex = 1)
 	dev.off()
 
-	pdf(height = 7, width = 7, file = "./output/figures/ FigureS1.pdf")
+	pdf(height = 7, width = 7, file = "./pols_sex/output/figures/ FigureS1_r1.pdf")
 		# Check out mean-variance relationships in each sex
 			par(mar = c(5,5,1,1))
 			plot(log(Mean_M) ~ log(SD_M), ylab = "log(Mean)", xlab = "log(SD)", data = data, col = "blue", las = 1, cex = 1.5, cex.axis = 1.5, cex.lab = 1.5)
