@@ -83,10 +83,11 @@
 		data$species <- ifelse(data$species == "Lagopus muta hyperborea", "Lagopus muta", data$species)
 		data$species <- ifelse(data$species == "Anolis carolensis", "Anolis carolinensis", data$species)
 		data$species <- ifelse(data$species == "Anolis carolensis", "Anolis carolinensis", data$species)
-
 	
+	# Remove white space
 		data$species <- trimws(data$species)
-		  
+		 
+	# Get some details on the number of species
 		  spp <- unique(data$species)
 		  spp <- gsub(" ", "_", spp)
 		 nSpp <- length(spp)
@@ -141,7 +142,7 @@
 
 	# Build tree
 		resolve_names <- tnrs_match_names(spp)
-		tree <- tol_induced_subtree(ott_ids = resolve_names$ott_id)
+		         tree <- tol_induced_subtree(ott_ids = resolve_names$ott_id)
 
 		plot(tree, no.margin = TRUE, type = "radial")
 
@@ -151,6 +152,7 @@
 		data_names <- gsub("_", " ", firstup(resolve_names$search_string))
 		rotl_names <- resolve_names$unique_name
 
+		# Switch all species names within the data to the synonymns from rotl so that a phylogenetic correlation matrix can be included in the models. 
 		spp_rotl <- data$species
 		for(i in 1:length(data_names)){
 		spp_rotl <- ifelse(data_names[i] == data$species, rotl_names[i], spp_rotl)
@@ -182,6 +184,7 @@
 	VmatCVR <- VmCovMat(data, "VlnCVR", "Dependency.temporal.level")
 
 	corrplot(as.matrix(VmatCVR), tl.col = "black", tl.cex = 0.8, is.corr = FALSE, type = "lower", method = "color")	
+
 # 4. Multi-level meta-analytic models (MLMA) - intercept only for hetero. 
 #----------------------------------------------------------------------------#
 	# Study and species level random effects are mostly confounded so study will probably capture most variation anyway, but worth attempting to estimate
@@ -207,7 +210,7 @@
 	   DevI2 <- I2(modRR_intDev, v = dev$v.lnRR, phylo = FALSE)
 
 	   #I2 for various trait categories
-	   behav <- subset(data, data$category == "behaviour")
+	   behav <- subset(data, data$category == "behavior")
 	  modRR_intbehav <- rma.mv(lnRR_2 ~ 1, V = v.lnRR, random = list(~1|study, ~1|obs), data = behav)
 	 
 	  #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
@@ -221,10 +224,10 @@
 	   LHI2 <- I2(modRR_intLH, v = LH$v.lnRR, phylo = FALSE)
 
 	# lnCVR
-	   modCVR_int <- rma.mv(lnCVR_es ~ 1, V = VlnCVR , random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
+	   modCVR_int <- rma.mv(lnCVR_es ~ 1, V = VlnCVR , random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(spp_rotl = phylo_cor), data = data)
 
 	   #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
-	   I2(modCVR_int, v = data$VlnCVR, phylo = "species")
+	   I2(modCVR_int, v = data$VlnCVR, phylo = "spp_rotl")
 
 	   #I2 for various trait categories
 	  modCVR_intPhys <- rma.mv(lnCVR_es ~ 1, V = VlnCVR, random = list(~1|study, ~1|obs), data = Phys)
