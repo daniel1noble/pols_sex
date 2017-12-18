@@ -81,7 +81,10 @@
 		data$species <- ifelse(data$species == "Melospiza g. nigrescens", "Melospiza georgiana", data$species)
 		data$species <- ifelse(data$species == "Melospiza g. georgiana", "Melospiza georgiana", data$species)
 		data$species <- ifelse(data$species == "Lagopus muta hyperborea", "Lagopus muta", data$species)
+		data$species <- ifelse(data$species == "Anolis carolensis", "Anolis carolinensis", data$species)
+		data$species <- ifelse(data$species == "Anolis carolensis", "Anolis carolinensis", data$species)
 
+	
 		data$species <- trimws(data$species)
 		  
 		  spp <- unique(data$species)
@@ -140,9 +143,20 @@
 		resolve_names <- tnrs_match_names(spp)
 		tree <- tol_induced_subtree(ott_ids = resolve_names$ott_id)
 
-		plot(tree, no.margin = TRUE)
+		plot(tree, no.margin = TRUE, type = "radial")
 
 		write.tree(tree, file="./pols_sex/output/tree_new")
+
+		# Now that we have matched species in ROTL, we need to convert the names of these species to the identified ID's in rotl to ensure the phylo matrix and species names match.
+		data_names <- gsub("_", " ", firstup(resolve_names$search_string))
+		rotl_names <- resolve_names$unique_name
+
+		spp_rotl <- data$species
+		for(i in 1:length(data_names)){
+		spp_rotl <- ifelse(data_names[i] == data$species, rotl_names[i], spp_rotl)
+		}	
+
+		data$spp_rotl <- spp_rotl
 
 	#Remove ott labels on end to make sure to matches species in dataset
 	phylo <- read.tree("./pols_sex/output/tree_new")
@@ -164,18 +178,19 @@
 	Ainv <- inverseA(phylo_BL, nodes = "ALL", scale = TRUE)$Ainv
 
 	# Create within study dependency and test impacts with sensitivity analysis. Assume r = 0.5 to estimate the covariance between two effects.
-	 VmatRR <- VmCovMat(data, "v.lnRR", "dependence")
-	VmatCVR <- VmCovMat(data, "VlnCVR", "dependence")
-	
+	 VmatRR <- VmCovMat(data, "v.lnRR", "Dependency.temporal.level")
+	VmatCVR <- VmCovMat(data, "VlnCVR", "Dependency.temporal.level")
+
+	corrplot(as.matrix(VmatCVR), tl.col = "black", tl.cex = 0.8, is.corr = FALSE, type = "lower", method = "color")	
 # 4. Multi-level meta-analytic models (MLMA) - intercept only for hetero. 
 #----------------------------------------------------------------------------#
 	# Study and species level random effects are mostly confounded so study will probably capture most variation anyway, but worth attempting to estimate
 
 	# lnRR
-	   modRR_int <- rma.mv(lnRR_2 ~ 1, V = v.lnRR, random = list(~1|study, ~1|species, ~1|obs), R = list(species = phylo_cor), data = data)
+	   modRR_int <- rma.mv(lnRR_2 ~ 1, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(spp_rotl = phylo_cor), data = data)
 	 
 	  #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
-	   I2(modRR_int, v = data$v.lnRR, phylo = "species")
+	   I2(modRR_int, v = data$v.lnRR, phylo = "spp_rotl")
 
 	   #I2 for various trait categories
 	   Phys <- subset(data, data$category == "physiology")

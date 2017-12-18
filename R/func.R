@@ -304,5 +304,11 @@ VmCovMat <- function(data, es_var, depend, cor = 0.5){
   	
   	return(corMat)
 }
-    
+   
+
+# Convert the first letter of string to upper case.
+  firstup <- function(x) {
+   substr(x, 1, 1) <- toupper(substr(x, 1, 1))
+		x
+	} 
        
