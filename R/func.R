@@ -285,6 +285,7 @@ I2 <- function(model, v, sims = 1500, phylo = FALSE){
   	return(corMat)
 	}
 
+
 #'@title Function for calculating covariance between dependent effect sizes
 #'@param data the data frame
 #'@param es_var the character identifier effect size sampling error variance column in the data
@@ -305,6 +306,24 @@ VmCovMat <- function(data, es_var, depend, cor = 0.5){
   	return(corMat)
 }
    
+
+es_var = "obs"   
+
+depend = "Dependency.individual.level"   
+# Note for this function to work replace es_var with "obs" and specify dependency variable as normal.
+VmCorMat <- function(data, es_var, depend, cor = 0.5){
+    	data$dep<-paste(data[,"study"], data[,depend], sep="_")
+
+    	tmp <- reshape::expand.grid.df(data.frame(row = data[, es_var], stdy1 = data[,"dep"]), data.frame(row = sqrt(data[, es_var]), stdy2 = data[,"dep"]))
+
+    	tmp$cor <- ifelse((tmp$stdy1 == tmp$stdy2), cor, 0)
+	  	corMat <- matrix(tmp$cor , nrow = nrow(data), ncol = nrow(data))
+	  	diag(corMat) <- 1
+  	
+  	return(corMat)
+}
+   
+
 
 # Convert the first letter of string to upper case.
   firstup <- function(x) {
