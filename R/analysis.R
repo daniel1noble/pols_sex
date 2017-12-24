@@ -135,7 +135,7 @@
 			text(paste("N = ", bp.out1$n), x = unique(bp.out1$group), y = 2)
 		}
 	
-# 3. Create covariance matrix
+# 3. Create phylogenetic matrix
 #----------------------------------------------------------------------------#
 	# Phylogenetic correlation matrix
 
@@ -182,15 +182,7 @@
 		Ainv <- inverseA(phylo_BL, nodes = "ALL", scale = TRUE)$Ainv
 		names <- gsub("_", " ", rownames(Ainv))
 		rownames(Ainv) <- colnames(Ainv) <- names
-
-
-	# Create within study dependency and test impacts with sensitivity analysis. Assume r = 0.5 to estimate the covariance between two effects.
-		 #VmatRR <- VmCovMat(data, "v.lnRR", "Dependency.individual.level")
-		#VmatCVR <- VmCovMat(data, "VlnCVR", "Dependency.individual.level")
-
-	# Build a correlation matrix to test impact of dependency
-		
-		
+	
 # 4. Multi-level meta-analytic models (MLMA) - intercept only for hetero. 
 #----------------------------------------------------------------------------#
 	# Study and species level random effects are mostly confounded so study will probably capture most variation anyway, but worth attempting to estimate
@@ -241,9 +233,10 @@
 	   modCVR_int <- rma.mv(lnCVR_es ~ 1, V = VlnCVR , random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(spp_rotl = phylo_cor), data = data)
 
 	   # Sensitivity analysis 
+	   	# Within study correlation matrix between effects sharing the same individuals
 	   		VmatCVR <- VmCorMat(data, "obs", "Dependency.individual.level")
-
-		
+	   		rownames(VmatCVR) <- colnames(VmatCVR) <- data$obs
+		    corrplot(as.matrix(VmatCVR), tl.col = "black", tl.cex = 0.8, is.corr = FALSE, type = "lower", method = "color")
 
 	   #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
 	   I2(modCVR_int, v = data$VlnCVR, phylo = "spp_rotl")
@@ -281,178 +274,330 @@
 		
 # 5. Marginal estimates / unconditional means for the groups. 
 #----------------------------------------------------------------------------#
-	# Run some "full" models with the relevant variables discussed. Run in lme as we can then use the effects package
-	# Run model in MCMCglmm
-	       data$phylo <- gsub(" ", "_", data$species)
-	       colnames(data)[match("trait", colnames(data))] <- "trait2"
-	       data$esID <- 1:dim(data)[1]
-	       Vmat <- as(solve(diag(data$v.lnRR)), "dgCMatrix")
-	       colnames(Vmat) <- rownames(Vmat) <- data$esID
+
 
 	# Note the below model, however, assumes now that the residual variance is fixed! So we must remove the estimation of the observation-level variance, or ADD it into the lme fit to get the same results between metafor and lme. But also problems including nested random effects in lme: https://biostatmatt.com/archives/2718 & here: https://stat.ethz.ch/pipermail/r-help/2002-September/025067.html.
 
 	#lnRR
-		modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), method = "REML", R = list(spp_rotl = phylo_cor), data = data)
-		AICc(modnameRR)
-		coefRRTable1A <- round_df(data.frame(Est. = modnameRR$b, LCI = modnameRR$ci.lb, LCI = modnameRR$ci.ub), digits = 3)
-
-		I2(modnameRR, v = data$v.lnRR, phylo = "spp_rotl")
-		# Model was to test whether parental care was sufficiently distinct from other traits
-		# modnameRR_parent <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding + parenting, V = v.lnRR, random = list(~1|study, ~1|spp_rotl), method = "REML", R = list(spp_rotl = phylo_cor), data = data)
-
-		#Sensitivity Analysis. Covariance matrix.
-			modnameRRDep <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = VmatRR, R = list(spp_rotl = phylo_cor), random = list(~1|study, ~1|spp_rotl, ~1|obs), method = "REML", data = data)
-			AICc(modnameRRDep)
-			coefRRTable1B <- round_df(data.frame(Est. = modnameRRDep$b, LCI = modnameRRDep$ci.lb, LCI = modnameRRDep$ci.ub), digits =3)
-		
-			TableS1RR <- rbind(coefRRTable1A, coefRRTable1B)
-			write.csv(TableS1RR, "./pols_sex/output/tables/TableS1RRBreeding_r1.csv")
-
-		#PREDICTIONS for each trait category. 
-			newDat <- expand.grid(list(0, unique(data$background1), unique(data$category),unique(data$mating), unique(data$breeding), 1, "M205"), stringsAsFactors = TRUE)
-			colnames(newDat) <- c("lnRR_2", "background1", "category","mating", "breeding", "esID", "study")
-
-			# Cerate new data we would like to predict for. 
-				newDat.rmv <- expand.grid(list(unique(data$background1), unique(data$category),unique(data$mating), unique(data$breeding)), stringsAsFactors = TRUE)
-				colnames(newDat.rmv) <- c("background1", "category","mating", "breeding")
-
-			# Create model matrix
-				X <- model.matrix(~category + background1 + mating + breeding, data = newDat.rmv)
-
-			# Generate point estimate predictions
-				newDat.rmv$pred <- X %*% coefficients(modnameRR)
-
-				VarCorr(modnameRR)
-
-			#modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = v.lnRR, random = list(~1|study, ~1|spp_rotl), method = "REML", R = list(spp_rotl = phylo_cor), data = data)
-
-			newDat.rmv_pred <- predict(modnameRR, newmods = newDat.rmv, addx = TRUE, tau2.levels = c("M205", "Sepsis cynipsea"))
-			newDat.rmv_pred <- cbind(newDat.rmv, as.data.frame(pred))
+	    # Metafor
 			
-			# The model for predictions. Much easier to predict with MCMCglmm objects and can integrate RE's
-			prior = list(R = list(V = 1, nu = 0.002, alpha.mu = 0, alpha.V = 1000), G = list(G1 = list(V = 1, nu = 0.002, alpha.mu = 0, alpha.V = 1000),  G2 = list(V = 1, fix = 1)))
+			modnameRR <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), method = "REML", R = list(spp_rotl = phylo_cor), data = data)
+			AICc(modnameRR)
+			coefRRTable1A <- round_df(data.frame(Est. = modnameRR$b, LCI = modnameRR$ci.lb, LCI = modnameRR$ci.ub), digits = 3)
 
-			modnameRRMCMC <- MCMCglmm(lnRR_2 ~ category + background1 + mating + breeding, random = ~study + esID, ginverse = list(esID = Vmat), nitt = 1000000, thin = 1000, pr = TRUE, family = "gaussian", verbose = FALSE, data = data)
-			summary(modnameRRMCMC)
-
-		# Make predictions for trait categories in the various levels
-			pred <- predict(modnameRRMCMC, newdata=newDat, marginal = ~esID, interval = "confidence")
-			predictions <- cbind(newDat, pred)
-			predictions <- predictions[predictions$background1 == "wild", ]
-
-		# Re-fit in lme. Try a little trick: https://biostatmatt.com/archives/2718
-			data2 <- data
-			data2$Dummy <- factor(1)
-			data2 <- groupedData(lnRR_2~1 |Dummy, data2)
+			I2(modnameRR, v = data$v.lnRR, phylo = "spp_rotl")
 			
-			modRR <- lme(lnRR_2 ~ category + background1 + mating + breeding, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~spp_rotl-1))), weights = varFixed(~v.lnRR), control=lmeControl(sigma = 1), method = "REML", data = data2)
-			summary(modRR)
 
-			# Try parenting. Try including phylogeny in the model using corBrownian and using the correlation argument in nlme. Can't quite get corBrownian to work. 
-			modRR_parenting <- lme(lnRR_2 ~ category + background1 + parenting + breeding, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~spp_rotl-1))), weights = varFixed(~v.lnRR), control=lmeControl(sigma = 1), method = "REML", data = data2)
-			summary(modRR_parenting)
+			#Sensitivity Analysis. Covariance matrix.
+				modnameRRDep <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = VmatRR, R = list(spp_rotl = phylo_cor, obs = VmatRR), random = list(~1|study, ~1|spp_rotl, ~1|obs), method = "REML", data = data)
+				AICc(modnameRRDep)
+				coefRRTable1B <- round_df(data.frame(Est. = modnameRRDep$b, LCI = modnameRRDep$ci.lb, LCI = modnameRRDep$ci.ub), digits =3)
+			
+				TableS1RR <- rbind(coefRRTable1A, coefRRTable1B)
+				write.csv(TableS1RR, "./pols_sex/output/tables/TableS1RRBreeding_r1.csv")
+
+			# Model predictions
+				# Cerate new data we would like to predict for. 
+					newDat.rmv <- expand.grid(list(unique(data$background1), unique(data$category),unique(data$mating), unique(data$breeding)), stringsAsFactors = TRUE)
+					colnames(newDat.rmv) <- c("background1", "category","mating", "breeding")
+
+				# Create model matrix
+					X <- model.matrix(~category + background1 + mating + breeding, data = newDat.rmv)
+
+				# Generate point estimate predictions and 95% confidence intervals
+					newDat.rmv$pred <- X %*% coefficients(modnameRR)
+					V = vcov(modnameRR)
+					se2 <- rowSums((X %*% V) * X)
+
+					alpha <- qt((1-0.95)/2, df = 304)
+					newDat.rmv$CI_L <- newDat.rmv$pred + (-alpha*sqrt(se2))
+					newDat.rmv$CI_U <- newDat.rmv$pred + (alpha*sqrt(se2))
+
+					predictions <- newDat.rmv[newDat.rmv$background1 == "wild", ]
+
+
+		# MCMCglmm
+
+			       data$phylo <- gsub(" ", "_", data$species)
+			       colnames(data)[match("trait", colnames(data))] <- "trait2"
+			       data$esID <- 1:dim(data)[1]
+			       Vmat <- as(solve(diag(data$v.lnRR)), "dgCMatrix")
+			       colnames(Vmat) <- rownames(Vmat) <- data$esID
+			
+					prior = list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002), G2 =  list(V = 1, nu = 0.002), G3 = list(V = 1, fix = 1))) 
+
+				 mod_RR_mcmc <- MCMCglmm(lnRR_2 ~ category + background1 + mating + breeding, random = ~study + spp_rotl + esID, ginverse = list(spp_rotl = Ainv, esID = Vmat), data = data, prior = prior, nitt = 500000, thin = 100, pr = FALSE, family = "gaussian", verbose = FALSE)
+				 summary(mod_RR_mcmc)
+
+			# Lets get marginal mean estimates for each group 
+			 	# extract fixed effects posterior distribution for each of the parameters estimated (contrasts)
+			 	sol_lnRR <- mod_RR_mcmc$Sol
+
+			 	# First we need the sample size for each of the categories as we'll produce a weighted average. We'll need all these throughout the process. 
+			 		   n_category <- table(data$category)
+			 		n_background1 <- table(data$background1)
+			 			 n_mating <- table(data$mating)
+			 		   n_breeding <- table(data$breeding)
+
+			# Marginal estimates for each trait category, averaging across the other variables/parameters
+			 		
+			 	# Trait category
+			 		behav_category <- as.mcmc(
+			 			sol_lnRR[,"(Intercept)"] +
+			 			sol_lnRR[,"background1wild"] * (n_background1[2] / sum(n_background1)) +
+			 			sol_lnRR[,"matingPolygyny"] * (n_mating[2] / sum(n_mating)) +  
+			 			sol_lnRR[,"matingPromiscuity"] * (n_mating[3] / sum(n_mating)) + 
+			 			sol_lnRR[,"breedingsemelparous"] * (n_breeding[2] / sum(n_breeding))
+			 			)
+
+			 		# Now that we have an intercept that is essentially unconditioned / averaged across all other levels we can get the marginal estimates for all other levels 
+			 			  develop_category <- behav_category + sol_lnRR[,"categorydevelopment"]
+			 			life_hist_category <- behav_category + sol_lnRR[,"categorylife history"]
+			 			     phys_category <- behav_category + sol_lnRR[,"categoryphysiology"]
+
+			 			 category_lnRR <- rbind(cbind(mean(behav_category), HPDinterval(behav_category)), cbind(mean(develop_category), HPDinterval(develop_category)), cbind(mean(life_hist_category), HPDinterval(life_hist_category)), cbind(mean(phys_category), HPDinterval(phys_category)))
+			 			 rownames(category_lnRR) <- c("behaviour", "development", "life history", "physiology")
+
+			 	#Wild versus Lab
+			 		lab_background <- as.mcmc(
+			 			sol_lnRR[,"(Intercept)"] +
+			 			sol_lnRR[,"matingPolygyny"] * (n_mating[2] / sum(n_mating)) +  
+			 			sol_lnRR[,"matingPromiscuity"] * (n_mating[3] / sum(n_mating)) + 
+			 			sol_lnRR[,"breedingsemelparous"] * (n_breeding[2] / sum(n_breeding)) + 
+			 			sol_lnRR[,"categorydevelopment"] * (n_category[2] / sum(n_category)) + 
+			 			sol_lnRR[,"categorylife history"] * (n_category[3] / sum(n_category)) +
+			 			sol_lnRR[,"categoryphysiology"] * (n_category[4] / sum(n_category))
+			 			)
+
+			 		wild_background <- lab_background + sol_lnRR[,"background1wild"]
+
+			 		 background_lnRR <- rbind(cbind(mean(lab_background), HPDinterval(lab_background)), cbind(mean(wild_background), HPDinterval(wild_background)))
+			 		 rownames(background_lnRR) <- c("lab", "wild")
+
+			 	# Mating system
+			 		 monogamy_mating <- as.mcmc(
+			 		 	sol_lnRR[,"(Intercept)"] +
+			 			sol_lnRR[,"breedingsemelparous"] * (n_breeding[2] / sum(n_breeding)) + 
+			 			sol_lnRR[,"categorydevelopment"] * (n_category[2] / sum(n_category)) + 
+			 			sol_lnRR[,"categorylife history"] * (n_category[3] / sum(n_category)) +
+			 			sol_lnRR[,"categoryphysiology"] * (n_category[4] / sum(n_category)) + 
+			 			sol_lnRR[,"background1wild"] * (n_background1[2] / sum(n_background1))
+			 			)
+
+			 		 polygyny_mating <- monogamy_mating + sol_lnRR[,"matingPolygyny"]
+			 		 promiscuity_mating <- monogamy_mating + sol_lnRR[,"matingPromiscuity"]
+
+			 		 mating_lnRR <- rbind(cbind(mean(monogamy_mating), HPDinterval(monogamy_mating)), cbind(mean(polygyny_mating), HPDinterval(polygyny_mating)), cbind(mean(promiscuity_mating), HPDinterval(promiscuity_mating)))
+			 		 rownames(mating_lnRR) <- c("monogamy", "polygyny", "promiscuity")
+
+			 	# Breeding system
+			 		 iteroparous_breeding <- as.mcmc(
+			 		 	sol_lnRR[,"(Intercept)"] +
+			 			sol_lnRR[,"categorydevelopment"] * (n_category[2] / sum(n_category)) + 
+			 			sol_lnRR[,"categorylife history"] * (n_category[3] / sum(n_category)) +
+			 			sol_lnRR[,"categoryphysiology"] * (n_category[4] / sum(n_category)) + 
+			 			sol_lnRR[,"background1wild"] * (n_background1[2] / sum(n_background1)) +
+			 			sol_lnRR[,"matingPolygyny"] * (n_mating[2] / sum(n_mating)) +  
+			 			sol_lnRR[,"matingPromiscuity"] * (n_mating[3] / sum(n_mating))
+			 			)
+
+			 	     semelparous_breeding <- iteroparous_breeding + sol_lnRR[,"breedingsemelparous"]
+
+			 	   breeding_lnRR <- rbind(cbind(mean(iteroparous_breeding), HPDinterval(iteroparous_breeding)), cbind(mean(semelparous_breeding), HPDinterval(semelparous_breeding)))
+			 	   rownames(breeding_lnRR) <- c("iteroparous", "semelparous")
+
+			 	  marg_estTab <- as.data.frame(rbind(category_lnRR, background_lnRR, mating_lnRR, breeding_lnRR))
+			 	  marg_estTab$obs <- 1:nrow(marg_estTab)
+			 	  marg_estTab$N <- N
+			 	  colnames(marg_estTab)[1] <- c("effect")
+
+			 	  # Calculate the percent increase of the sex with larger trait values
+			 	  marg_estTab$per <- exp(marg_estTab$effect)
+				  marg_estTab$per_inc <- ifelse(marg_estTab$per < 1, (1 - marg_estTab$per)*100, (marg_estTab$per-1)*100)
 		
-
-		# Get marginal / unconditional mean estimates from the model.
-			marginalRR <- marginalize(mod = modRR, vars = c("category", "background1", "mating", "breeding")) 
-			margTableRR <- margTable(marginalRR)
-			margTableRR$N <- N
-			margTableRR$obs <- 1:nrow(margTableRR)
-
-		# Marginal estimates with parental care added in.
-			marginalRR_parenting <- marginalize(mod = modRR_parenting, vars = c("category", "background1", "mating", "breeding", "parenting")) 
-			margTableRR_parenting <- margTable(marginalRR_parenting)
-
-		# Convert estimate back to percentage difference. Note that variances are extracted from the model excluding the sampling variance. 
-			var <- sum(as.numeric(unique(VarCorr(modRR)[,"Variance"]))[1:3])
-			margTableRR$per <- exp(margTableRR$effect)
-			margTableRR$per_inc <- ifelse(margTableRR$per < 1, (1 - margTableRR$per)*100, (margTableRR$per-1)*100)
-
-		# Models with parental care
-			var <- sum(as.numeric(unique(VarCorr(modRR_parenting)[,"Variance"]))[1:3])
-			margTableRR_parenting$per <- exp(margTableRR_parenting$effect)
-
-		# Calculate the percent increase of the sex with larger trait values
-			margTableRR_parenting$per_inc <- ifelse(margTableRR_parenting$per < 1, (1 - margTableRR_parenting$per)*100, (margTableRR_parenting$per-1)*100)
-
-		# Adding subset analysis for behaviour and physiology to understand how specific traits within these categories respond.
-
-		#BEHAVIOURAL TRAITS
+	#BEHAVIOURAL TRAITS
+			
 			behav <- subset(data, category == "behavior")
 			behav$obs <- 1:dim(behav)[1]
+			behav$behavioural.categories<- ifelse(behav$behavioural.categories == "dispersal", "activity", behav$behavioural.categories)
 			behav$behavioural.categories <- as.factor(behav$behavioural.categories)
 			behav$lnRR_2 <- ifelse(behav$direct == "high", behav$lnRR*(-1), behav$lnRR)
 
-			VmatRR_behav <- VmCovMat(behav, "v.lnRR", "Dependency.behaviour")
+			VmatRR_behav <- VmCorMat(behav, "obs", "Dependency.behaviour")
+			rownames(VmatRR_behav) <- colnames(VmatRR_behav) <- behav$obs
 			corrplot(VmatRR_behav, tl.col = "black", tl.cex = 0.8, is.corr = FALSE, type = "lower", method = "color")
 
-		# Model assuming independence
-			mod_lnRR_behav <- rma.mv(lnRR_2 ~ behavioural.categories, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), data = behav, method = )
-			mod_lnRR_behav <- rma.mv(lnRR_2 ~ behavioural.categories, V = v.lnRR, random = list(~1|study, ~1|obs), data = behav)
+		# metafor
+			# Model assuming independence
+			mod_lnRR_behav <- rma.mv(lnRR_2 ~ behavioural.categories, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), data = behav) 
 			
+			mod_lnRR_behavSS <- rma.mv(lnRR_2 ~ behavioural.categories, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(obs = VmatRR_behav), data = behav) 
+
 			AICc(mod_lnRR_behav)
 
-		# Fit in lmedata2 <- data
-			data2_behav <- behav
-			data2_behav$Dummy <- factor(1)
-			data2_behav <- groupedData(lnRR_2 ~ 1 |Dummy, data2_behav)
-			#control=lmeControl(sigma = 1)
-			
-			modRR_behav_lme <- lme(lnRR_2 ~ behavioural.categories, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~spp_rotl-1), pdIdent(~obs-1))), control=lmeControl(sigma = 1), weights = varFixed(~v.lnRR), method = "REML", data = data2_behav)
-			summary(modRR_behav_lme)
+		# MCMCglmm
+			behav$esID <- 1:dim(behav)[1]
+			Vmat_behav <- as(solve(diag(behav$v.lnRR)), "dgCMatrix")
+			colnames(Vmat_behav) <- rownames(Vmat_behav) <- behav$esID
 
-			modRR_behav_lme <- lme(lnRR_2 ~ behavioural.categories, random = ~1|study, weights = varFixed(~v.lnRR), method = "REML", data = data2_behav)
-			summary(modRR_behav_lme)
+			prior = list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002), G2 =  list(V = 1, nu = 0.002), G3 = list(V = 1, fix = 1))) 
 
-			modRR_behav_lme4 <- lmer(lnRR_2 ~ behavioural.categories + (1|study) + (1|spp_rotl), data = data2_behav)
-			summary(modRR_behav_lme4)
+			mod_lnRR_behav_mcmc <- MCMCglmm(lnRR ~ behavioural.categories, random = ~study + spp_rotl + esID, ginverse = list(spp_rotl = Ainv, esID = Vmat_behav), data = behav, prior = prior, nitt = 500000, thin = 100, pr = FALSE, family = "gaussian", verbose = FALSE)
+			summary(mod_lnRR_behav_mcmc) 
 
-			# Marginal estimates for behavioural categories
-			marginalRR_behav <- marginalize(mod = modRR_behav_lme, vars = c("behavioural.categories")) 
-			marginalRR_behav$N <- rbind(table(behav$behavioural.categories, behav$background1)[,1], table(behav$behavioural.categories, behav$background1)[,2])
-			marginalRR_behav <- margTable(marginalRR_behav)
-			marginalRR_behav$obs <- 1:nrow(marginalRR_behav)
-		
-		# Model assessing the impact of dependency in that same individuals are run across assays
-			mod_lnRR_behavSS <- rma.mv(lnRR ~ behavioural.categories, V = VmatRR_behav, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(obs = ) data = behav)
-			AICc(mod_lnRR_behavSS)
+			# Mean estimates in each level
+				lnRR_behav_Sol <- mod_lnRR_behav_mcmc$Sol
 
-		#PHYSIOLOGICAL TRAITS
+				activity_behav <- lnRR_behav_Sol[,"(Intercept)"]
+				aggression_behav <- activity_behav + lnRR_behav_Sol[,"behavioural.categoriesaggression"]
+				bold_behav <- activity_behav + lnRR_behav_Sol[,"behavioural.categoriesboldness"]
+				exlore_behav <- activity_behav + lnRR_behav_Sol[,"behavioural.categoriesexploration"]
+				parent_behav <- activity_behav + lnRR_behav_Sol[,"behavioural.categoriesparenting"]
+				stressCope_behav <- activity_behav + lnRR_behav_Sol[,"behavioural.categoriesstress-coping"]
+
+			behav_lnRRTab <- as.data.frame(rbind(c(mean(activity_behav), HPDinterval(activity_behav)), c(mean(aggression_behav), HPDinterval(aggression_behav)), c(mean(bold_behav), HPDinterval(bold_behav)), c(mean(exlore_behav), HPDinterval(exlore_behav)), c(mean(parent_behav), HPDinterval(parent_behav)), c(mean(stressCope_behav), HPDinterval(stressCope_behav))))
+			rownames(behav_lnRRTab) <- c("activity", "aggression", "boldness", "exploration", "parenting", "stress-coping")
+			colnames(behav_lnRRTab) <- c("effect", "lower", "upper")
+			behav_lnRRTab$obs <- 1:nrow(behav_lnRRTab)
+			behav_lnRRTab$N <- table(behav$behavioural.categories)
+
+	#PHYSIOLOGICAL TRAITS
 			phys <- subset(data, category == "physiology")
 			phys$obs <- 1:dim(phys)[1]
 			phys$physiological.category <- as.factor(phys$physiological.category)
 
 			# Model assuming independence
 			mod_lnRR_phys <- rma.mv(lnRR ~ physiological.category, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(spp_rotl = phylo_cor), data = phys)
-		
+
+		#MCMCglmm
+			phys$esID <- 1:dim(phys)[1]
+			Vmat_phys <- as(solve(diag(phys$v.lnRR)), "dgCMatrix")
+			colnames(Vmat_phys) <- rownames(Vmat_phys) <- phys$esID
+
+			prior = list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002), G2 =  list(V = 1, nu = 0.002), G3 = list(V = 1, fix = 1))) 
+
+			mod_lnRR_phys_mcmc <- MCMCglmm(lnRR ~ physiological.category, random = ~study + spp_rotl + esID, ginverse = list(spp_rotl = Ainv, esID = Vmat_phys), data = phys, prior = prior, nitt = 500000, thin = 100, pr = FALSE, family = "gaussian", verbose = FALSE)
+			summary(mod_lnRR_phys_mcmc) 
+
+			# Mean estimates in each level
+				lnRR_phys_Sol <- mod_lnRR_phys_mcmc$Sol
+
+				baseline_phys <- lnRR_phys_Sol[,"(Intercept)"]
+				immune_phys <- baseline_phys + lnRR_phys_Sol[,"physiological.categoryimmun"]
+				other_phys <- baseline_phys + lnRR_phys_Sol[,"physiological.categoryother"]
+				stressed_phys <- baseline_phys + lnRR_phys_Sol[,"physiological.categorystressed"]
+
+			phys_lnRRTab <- as.data.frame(rbind(c(mean(baseline_phys), HPDinterval(baseline_phys)), c(mean(immune_phys), HPDinterval(immune_phys)), c(mean(other_phys), HPDinterval(other_phys)), c(mean(stressed_phys), HPDinterval(stressed_phys))))
+			rownames(phys_lnRRTab) <- c("baseline", "immune", "other", "stressed")
+			colnames(phys_lnRRTab) <- c("effect", "lower", "upper")
+			phys_lnRRTab$obs <- 1:nrow(phys_lnRRTab)
+			phys_lnRRTab$N <- table(phys$physiological.category)
 
 	#lnCVR
 	
-		modnameCVR <- rma.mv(lnCVR_es ~ category + background1 + mating + breeding, V = VlnCVR, random = list(~1|study, ~1|spp_rotl), method = "REML", R = list(spp_rotl = phylo_cor), data = data)
-		AICc(modnameCVR)
-		coefCVRTable1A <- round_df(data.frame(Est. = modnameCVR$b, LCI = modnameCVR$ci.lb, LCI = modnameCVR$ci.ub), digits = 3)
+		#metafor
+			modnameCVR <- rma.mv(lnCVR_es ~ category + background1 + mating + breeding, V = VlnCVR, random = list(~1|study, ~1|spp_rotl, ~1|obs), method = "REML", R = list(spp_rotl = phylo_cor), data = data)
+			AICc(modnameCVR)
+			coefCVRTable1A <- round_df(data.frame(Est. = modnameCVR$b, LCI = modnameCVR$ci.lb, LCI = modnameCVR$ci.ub), digits = 3)
 
 		#Sensitivity Analysis. Covariance matrix.
-			modnameCVRDep <- rma.mv(lnCVR_es ~ category + background1 + mating + breeding, V = VmatCVR, R = list(spp_rotl = phylo_cor), random = list(~1|study, ~1|spp_rotl), method = "REML", data = data)
+			modnameCVRDep <- rma.mv(lnCVR_es ~ category + background1 + mating + breeding, V = VlnCVR, R = list(spp_rotl = phylo_cor, obs = VmatCVR), random = list(~1|study, ~1|spp_rotl, ~1|obs), method = "REML", data = data)
 			AICc(modnameCVRDep)
 			coefCVRTable1B <- round_df(data.frame(Est. = modnameCVRDep$b, LCI = modnameCVRDep$ci.lb, LCI = modnameCVRDep$ci.ub), digits =3)
 			
 			TableS1CVR <- rbind(coefCVRTable1A, coefCVRTable1B)
 			write.csv(TableS1CVR, "./pols_sex/output/tables/TableS1CVR_breed_r1.csv")
 
-		# Re-fit in lme. Try a little trick: https://biostatmatt.com/archives/2718
-			data2 <- data
-			data2$Dummy <- factor(1)
-			data2 <- groupedData(lnCVR_es~1 |Dummy, data2)
-			modnameCVRMeta <- rma.mv(lnCVR_es ~ category + background1 + mating + breeding, V = VlnCVR, random = list(~1|study, ~1|spp_rotl), method = "REML", data = data2)
-			modCVR <- lme(lnCVR_es ~ category + background1 + mating + breeding, random = pdBlocked(list(pdIdent(~study-1), pdIdent(~spp_rotl-1))), weights = varFixed(~VlnCVR), control=lmeControl(sigma = 1), method = "REML", data = data2)
-			summary(modCVR)
+		#MCMCglmm
 
-		# Get marginal / unconditional estimates from the model.
-			marginalCVR <- marginalize(mod = modCVR, vars = c("category", "background1", "mating", "breeding"))
-			margTableCVR <- margTable(marginalCVR)
-			margTableCVR$N <- N
-			margTableCVR$obs <- 1:nrow(margTableCVR)
+			prior = list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002), G2 =  list(V = 1, nu = 0.002), G3 = list(V = 1, fix = 1))) 
+
+			 mod_CVR_mcmc <- MCMCglmm(lnCVR_es ~ category + background1 + mating + breeding, random = ~study + spp_rotl + esID, ginverse = list(spp_rotl = Ainv, esID = Vmat), data = data, prior = prior, nitt = 500000, thin = 100, pr = FALSE, family = "gaussian", verbose = FALSE)
+			 summary(mod_CVR_mcmc)
+
+			# Lets get marginal mean estimates for each group 
+			 	# extract fixed effects posterior distribution for each of the parameters estimated (contrasts)
+			 	sol_lnCVR <- mod_CVR_mcmc$Sol
+
+			 	# First we need the sample size for each of the categories as we'll produce a weighted average. We'll need all these throughout the process. 
+			 		   n_category <- table(data$category)
+			 		n_background1 <- table(data$background1)
+			 			 n_mating <- table(data$mating)
+			 		   n_breeding <- table(data$breeding)
+
+			# Marginal estimates for each trait category, averaging across the other variables/parameters
+			 		
+			 	# Trait category
+			 		behav_category_lnCVR <- as.mcmc(
+			 			sol_lnCVR[,"(Intercept)"] +
+			 			sol_lnCVR[,"background1wild"] * (n_background1[2] / sum(n_background1)) +
+			 			sol_lnCVR[,"matingPolygyny"] * (n_mating[2] / sum(n_mating)) +  
+			 			sol_lnCVR[,"matingPromiscuity"] * (n_mating[3] / sum(n_mating)) + 
+			 			sol_lnCVR[,"breedingsemelparous"] * (n_breeding[2] / sum(n_breeding))
+			 			)
+
+			 		# Now that we have an intercept that is essentially unconditioned / averaged across all other levels we can get the marginal estimates for all other levels 
+			 			  develop_category_lnCVR <- behav_category_lnCVR + sol_lnCVR[,"categorydevelopment"]
+			 			life_hist_category_lnCVR <- behav_category_lnCVR + sol_lnCVR[,"categorylife history"]
+			 			     phys_category_lnCVR <- behav_category_lnCVR + sol_lnCVR[,"categoryphysiology"]
+
+			 			 category_lnCVR <- rbind(cbind(mean(behav_category_lnCVR), HPDinterval(behav_category_lnCVR)), cbind(mean(develop_category_lnCVR), HPDinterval(develop_category_lnCVR)), cbind(mean(life_hist_category_lnCVR), HPDinterval(life_hist_category_lnCVR)), cbind(mean(phys_category_lnCVR), HPDinterval(phys_category_lnCVR)))
+			 			 rownames(category_lnCVR) <- c("behaviour", "development", "life history", "physiology")
+
+			 	#Wild versus Lab
+			 		lab_background_lnCVR <- as.mcmc(
+			 			sol_lnCVR[,"(Intercept)"] +
+			 			sol_lnCVR[,"matingPolygyny"] * (n_mating[2] / sum(n_mating)) +  
+			 			sol_lnCVR[,"matingPromiscuity"] * (n_mating[3] / sum(n_mating)) + 
+			 			sol_lnCVR[,"breedingsemelparous"] * (n_breeding[2] / sum(n_breeding)) + 
+			 			sol_lnCVR[,"categorydevelopment"] * (n_category[2] / sum(n_category)) + 
+			 			sol_lnCVR[,"categorylife history"] * (n_category[3] / sum(n_category)) +
+			 			sol_lnCVR[,"categoryphysiology"] * (n_category[4] / sum(n_category))
+			 			)
+
+			 		wild_background_lnCVR <- lab_background_lnCVR + sol_lnCVR[,"background1wild"]
+
+			 		 background_lnCVR <- rbind(cbind(mean(lab_background_lnCVR), HPDinterval(lab_background_lnCVR)), cbind(mean(wild_background_lnCVR), HPDinterval(wild_background_lnCVR)))
+			 		 rownames(background_lnCVR) <- c("lab", "wild")
+
+			 	# Mating system
+			 		 monogamy_mating_lnCVR <- as.mcmc(
+			 		 	sol_lnCVR[,"(Intercept)"] +
+			 			sol_lnCVR[,"breedingsemelparous"] * (n_breeding[2] / sum(n_breeding)) + 
+			 			sol_lnCVR[,"categorydevelopment"] * (n_category[2] / sum(n_category)) + 
+			 			sol_lnCVR[,"categorylife history"] * (n_category[3] / sum(n_category)) +
+			 			sol_lnCVR[,"categoryphysiology"] * (n_category[4] / sum(n_category)) + 
+			 			sol_lnCVR[,"background1wild"] * (n_background1[2] / sum(n_background1))
+			 			)
+
+			 		 polygyny_mating_lnCVR <- monogamy_mating_lnCVR + sol_lnCVR[,"matingPolygyny"]
+			 		 promiscuity_mating_lnCVR <- monogamy_mating_lnCVR + sol_lnCVR[,"matingPromiscuity"]
+
+			 		 mating_lnCVR <- rbind(cbind(mean(monogamy_mating_lnCVR), HPDinterval(monogamy_mating_lnCVR)), cbind(mean(polygyny_mating_lnCVR), HPDinterval(polygyny_mating_lnCVR)), cbind(mean(promiscuity_mating_lnCVR), HPDinterval(promiscuity_mating_lnCVR)))
+			 		 rownames(mating_lnCVR) <- c("monogamy", "polygyny", "promiscuity")
+
+			 	# Breeding system
+			 		 iteroparous_breeding_lnCVR <- as.mcmc(
+			 		 	sol_lnCVR[,"(Intercept)"] +
+			 			sol_lnCVR[,"categorydevelopment"] * (n_category[2] / sum(n_category)) + 
+			 			sol_lnCVR[,"categorylife history"] * (n_category[3] / sum(n_category)) +
+			 			sol_lnCVR[,"categoryphysiology"] * (n_category[4] / sum(n_category)) + 
+			 			sol_lnCVR[,"background1wild"] * (n_background1[2] / sum(n_background1)) +
+			 			sol_lnCVR[,"matingPolygyny"] * (n_mating[2] / sum(n_mating)) +  
+			 			sol_lnCVR[,"matingPromiscuity"] * (n_mating[3] / sum(n_mating))
+			 			)
+
+			 	     semelparous_breeding_lnCVR <- iteroparous_breeding_lnCVR + sol_lnCVR[,"breedingsemelparous"]
+
+			 	   breeding_lnCVR <- rbind(cbind(mean(iteroparous_breeding_lnCVR), HPDinterval(iteroparous_breeding_lnCVR)), cbind(mean(semelparous_breeding_lnCVR), HPDinterval(semelparous_breeding_lnCVR)))
+			 	   rownames(breeding_lnCVR) <- c("iteroparous", "semelparous")
+
+			 	  marg_estTab_CVR <- as.data.frame(rbind(category_lnCVR, background_lnCVR, mating_lnCVR, breeding_lnCVR))
+			 	  marg_estTab_CVR$obs <- 1:nrow(marg_estTab_CVR)
+			 	   marg_estTab_CVR$N <- N
+			 	  colnames(marg_estTab_CVR)[1] <- c("effect")
+
+
 
 # 6. Publication Bias
 #----------------------------------------------------------------------------#
@@ -522,7 +667,7 @@
 			mtext("B)", adj = -0.25, padj = 0.5)	
 	dev.off()		
 	
-	pdf(height = 7, width = 7, file = "./output/figures/figure1.pdf")
+	pdf(height = 7, width = 7, file = "./pols_sex/output/figures/figure1.pdf")
 		  	par(mar = c(1,1,1,1))
 		  	plot(phylo, cex = 0.85)  #type = "fan"
 	dev.off()
@@ -530,8 +675,8 @@
 	pdf(width = 12.678414, height = 5.506608, file = "./pols_sex/output/figures/Figure1_r1.pdf")
 			par(mfrow = c(1,2),  bty = "n", mar = c(5,10,2,1))
 
-			labels <- tolower(rownames(coefTabRR <- margTableRR)) 
-			yRef <- c(1:4, 7,8, 11:14, 17:18)
+			labels <- tolower(rownames(coefTabRR <- marg_estTab)) 
+			yRef <- c(1:4, 7,8, 11:13, 16:17)
 			
 			#lnRR
 			plot(obs~effect,  type = "n", xlim = c(-0.6, 0.6), ylim = c(0, max(yRef)+2), xlab = "lnRR", ylab = "", data = coefTabRR, yaxt='n', cex.lab = 1.5)
@@ -542,14 +687,14 @@
 			arrows(x0=coefTabRR[-30,"effect"] , y0= yRef, x1= coefTabRR[-30,"upper"] , y1 = yRef, length = 0, angle = 90)
 			mtext(side  = 2, labels, at = yRef, las = 1)
 			mtext(side  = 2, expression(bold("A)")), at = max(yRef)+2, line = 6, las = 1, cex = 1.5, padj = -1.0)
-			labRef <- c(5,9,15,19) #labRef <- c(5,9,13,20,25,31,37,42,46)
+			labRef <- c(5,9,14,18) #labRef <- c(5,9,13,20,25,31,37,42,46)
 			titles <- c("Trait Type", "Study Envir.", "Mating Syst.", "Breeding")
 			mtext(side  = 2, titles, font = 2, at = labRef, las = 1, cex = 1)
 			text("Males 'faster'", x = -0.3, y = max(yRef)+2, cex = 1)
 			text("Females 'faster'", x = +0.3, y = max(yRef)+2, cex = 1)
 
 			#lnCVR
-			coefTabCVR <- margTableCVR
+			coefTabCVR <- marg_estTab_CVR
 			par(mar = c(5,1,2,10))
 			plot(obs~effect,  type = "n", xlim = c(-0.6, 0.6), ylim = c(0, max(yRef)+2), xlab = "lnCVR", ylab = "", data = coefTabCVR, yaxt='n', cex.lab = 1.5)
 			abline(v = 0, lty = 2)
@@ -571,26 +716,79 @@
 			points(log(Mean_F) ~ log(SD_F),  data = data, col = "red", cex = 1.5)
 			points(y = c(8, 7), x = c(-2, -2), col = c("blue", "red"), cex = 1.5)
 			text(c("Males", "Females"), y = c(7.9, 6.9), x = c(-1.8, -1.8), adj = c(0,0))
-			box()
-			
+			box()	
 	dev.off()
 
-
-	pdf(width=6.907489, height = 5.859031, file = "./output/figures/pred.Fig.pdf")
+	pdf(width=6.907489, height = 5.859031, file = "./pols_sex/output/figures/pred.Fig_r1.pdf")
 		par(bty = "n", mar = c(5,10,2,1))
-				predictions$yRef <- c(c(1:(0.5*(nrow(predictions)))), c(18:(nrow(predictions)+1)))
+				predictions$yRef <- c(c(1:(0.5*(nrow(predictions)))), c(18:(nrow(predictions)+5)))
 				Labels <- as.character(interaction(predictions$category, predictions$mating))
 				#lnRR
-				plot(yRef~fit,  type = "n", xlim = c(-0.5, 0.5), ylim = c(0, max(yRef)+2), xlab = "Predicted lnRR", ylab = "", data = predictions, yaxt='n', cex.lab = 1.5)
+				plot(yRef~pred,  type = "n", xlim = c(-0.5, 0.5), ylim = c(0, max(yRef)+2), xlab = "Predicted lnRR", ylab = "", data = predictions, yaxt='n', cex.lab = 1.5)
 				abline(v = 0, lty = 2, col = "gray90")
 				
-				points(predictions$yRef~predictions[, "fit"], pch = 16) #-30 from other table
-				arrows(x0=predictions[,"fit"] , y0= predictions$yRef, x1= predictions[,"lwr"] , y1 = predictions$yRef, length = 0, angle = 90)
-				arrows(x0=predictions[,"fit"] , y0= predictions$yRef, x1= predictions[,"upr"] , y1 = predictions$yRef, length = 0, angle = 90)
+				points(predictions$yRef~predictions[, "pred"], pch = 16) #-30 from other table
+				arrows(x0=predictions[,"pred"] , y0= predictions$yRef, x1= predictions[,"CI_L"] , y1 = predictions$yRef, length = 0, angle = 90)
+				arrows(x0=predictions[,"pred"] , y0= predictions$yRef, x1= predictions[,"CI_U"] , y1 = predictions$yRef, length = 0, angle = 90)
 
-				text(x = 0, y = 34, "iteroparous", font = 2)
-				text(x = 0, y = 17, "semelparous", font = 2)
+				text(x = 0, y = 30, "iteroparous", font = 2)
+				text(x = 0, y = 14, "semelparous", font = 2)
 				mtext(side  = 2, Labels, at = predictions$yRef, las = 1, cex = 0.8)
 				abline(v=0, lty=2)
 	dev.off()			
 
+	pdf(width=13.736111, height = 7.111111, file = "./pols_sex/output/figures/behavPhys_fig2_r1.pdf")
+			par(mfrow = c(1,2), bty = "n", mar = c(5,9,1,10))
+
+			labels <- tolower(rownames(coefTabRR <- behav_lnRRTab)) 
+			yRef <- c(1:6)
+			
+			#lnRR
+			plot(obs~effect,  type = "n", xlim = c(-1, 1), ylim = c(0, max(yRef)+2), xlab = "lnRR", ylab = "", data = coefTabRR, yaxt='n', cex.lab = 1.5)
+			abline(v = 0, lty = 2)
+			
+			points(yRef~coefTabRR[, "effect"], pch = 16) #-30 from other table
+			arrows(x0=coefTabRR[,"effect"] , y0= yRef, x1= coefTabRR[,"lower"] , y1 = yRef, length = 0, angle = 90)
+			arrows(x0=coefTabRR[,"effect"] , y0= yRef, x1= coefTabRR[,"upper"] , y1 = yRef, length = 0, angle = 90)
+			mtext(side  = 2, labels, at = yRef, las = 1)
+			
+			labRef <- c(7.5) #labRef <- c(5,9,13,20,25,31,37,42,46)
+			titles <- c("Behavioural Trait Type")
+			mtext(side  = 2, titles, font = 2, at = labRef, las = 1, cex = 1)
+			mtext(side  = 4, coefTabRR$N, at = yRef, las = 1, adj = .5, line = 1)
+			mtext(side = 4, expression(bold("N")), at = max(yRef)+0.5, las = 1, line = 0.5, cex = 1.2)
+			mtext(side  = 4, round(coefTabRR$effect, digits = 2), at = yRef, las = 1, adj = .5, line = 3)
+			mtext(side  = 4, paste0("[", round(coefTabRR$lower, digits =2),",", round(coefTabRR$upper, digits = 2), "]"), at = yRef, las = 1, adj = .5, line = 6.5)
+			mtext(side = 4, expression(bold("Est. [95% CI]")), at = labRef, las = 1, line = 3, cex = 1.2)
+			text("Females Higher", font = 2, x = 0.5, y = labRef)
+			text("Males Higher", font = 2, x = -0.5, y = labRef)
+			mtext("A)", font=2, adj = -0.50, cex = 2, padj = 1)
+			par(bty = "n", mar = c(5,9,1,10))
+
+			labels <- tolower(rownames(coefTabRR <- phys_lnRRTab)) 
+			yRef <- c(1:4)
+			
+			#lnRR
+			plot(obs~effect,  type = "n", xlim = c(-1, 1), ylim = c(0, max(yRef)+1), xlab = "lnRR", ylab = "", data = coefTabRR, yaxt='n', cex.lab = 1.5)
+			abline(v = 0, lty = 2)
+			
+			points(yRef~coefTabRR[, "effect"], pch = 16) #-30 from other table
+			arrows(x0=coefTabRR[,"effect"] , y0= yRef, x1= coefTabRR[,"lower"] , y1 = yRef, length = 0, angle = 90)
+			arrows(x0=coefTabRR[,"effect"] , y0= yRef, x1= coefTabRR[,"upper"] , y1 = yRef, length = 0, angle = 90)
+			mtext(side  = 2, labels, at = yRef, las = 1)
+			
+			labRef <- c(4.7) #labRef <- c(5,9,13,20,25,31,37,42,46)
+			titles <- c("Physiological Measure")
+			mtext(side  = 2, titles, font = 2, at = labRef, las = 1, cex = 1)
+			mtext(side  = 4, coefTabRR$N, at = yRef, las = 1, adj = .5, line = 1)
+			mtext(side = 4, expression(bold("N")), at = max(yRef)+0.5, las = 1, line = 0.5, cex = 1.2)
+			mtext(side  = 4, round(coefTabRR$effect, digits = 2), at = yRef, las = 1, adj = .5, line = 3)
+			mtext(side  = 4, paste0("[", round(coefTabRR$lower, digits =2),",", round(coefTabRR$upper, digits = 2), "]"), at = yRef, las = 1, adj = .5, line = 6.5)
+			mtext(side = 4, expression(bold("Est. [95% CI]")), at = labRef, las = 1, line = 3, cex = 1.2)
+			text("Females Higher", font = 2, x = 0.5, y = labRef)
+			text("Males Higher", font = 2, x = -0.5, y = labRef)
+			mtext("B)", font=2, adj = -0.50, cex = 2, padj = 1)
+
+	dev.off()
+
+	
