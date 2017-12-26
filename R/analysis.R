@@ -272,7 +272,7 @@
 		write.csv(lnRR, file = "lnRR_het_22.12.17.csv")
 		write.csv(lnCVR, file = "lnCVR_het_22.12.17.csv")
 		
-# 5. Marginal estimates / unconditional means for the groups. 
+# 5. Meta-regression models: Marginal estimates / unconditional means for the groups. 
 #----------------------------------------------------------------------------#
 
 
@@ -328,6 +328,9 @@
 
 				 mod_RR_mcmc <- MCMCglmm(lnRR_2 ~ category + background1 + mating + breeding, random = ~study + spp_rotl + esID, ginverse = list(spp_rotl = Ainv, esID = Vmat), data = data, prior = prior, nitt = 500000, thin = 100, pr = FALSE, family = "gaussian", verbose = FALSE)
 				 summary(mod_RR_mcmc)
+
+				 autocorr.diag(mod_RR_mcmc$Sol)
+				 autocorr.diag(mod_RR_mcmc$VCV)
 
 			# Lets get marginal mean estimates for each group 
 			 	# extract fixed effects posterior distribution for each of the parameters estimated (contrasts)
@@ -415,7 +418,7 @@
 			 	  marg_estTab$per <- exp(marg_estTab$effect)
 				  marg_estTab$per_inc <- ifelse(marg_estTab$per < 1, (1 - marg_estTab$per)*100, (marg_estTab$per-1)*100)
 		
-	#BEHAVIOURAL TRAITS
+		#BEHAVIOURAL TRAITS
 			
 			behav <- subset(data, category == "behavior")
 			behav$obs <- 1:dim(behav)[1]
@@ -430,10 +433,13 @@
 		# metafor
 			# Model assuming independence
 			mod_lnRR_behav <- rma.mv(lnRR_2 ~ behavioural.categories, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), data = behav) 
+
+			write.csv(round_df(data.frame(Est. = mod_lnRR_behav$b, LCI = mod_lnRR_behav$ci.lb, LCI = mod_lnRR_behav$ci.ub), digits =3), file = "behavModCoefs_r1.csv")
 			
 			mod_lnRR_behavSS <- rma.mv(lnRR_2 ~ behavioural.categories, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(obs = VmatRR_behav), data = behav) 
 
 			AICc(mod_lnRR_behav)
+			AICc(mod_lnRR_behavSS)
 
 		# MCMCglmm
 			behav$esID <- 1:dim(behav)[1]
@@ -461,13 +467,15 @@
 			behav_lnRRTab$obs <- 1:nrow(behav_lnRRTab)
 			behav_lnRRTab$N <- table(behav$behavioural.categories)
 
-	#PHYSIOLOGICAL TRAITS
+		#PHYSIOLOGICAL TRAITS
 			phys <- subset(data, category == "physiology")
 			phys$obs <- 1:dim(phys)[1]
 			phys$physiological.category <- as.factor(phys$physiological.category)
 
 			# Model assuming independence
 			mod_lnRR_phys <- rma.mv(lnRR ~ physiological.category, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(spp_rotl = phylo_cor), data = phys)
+
+			write.csv(round_df(data.frame(Est. = mod_lnRR_phys$b, LCI = mod_lnRR_phys$ci.lb, LCI = mod_lnRR_phys$ci.ub), digits =3), file = "physModCoefs_r1.csv")
 
 		#MCMCglmm
 			phys$esID <- 1:dim(phys)[1]
@@ -597,8 +605,6 @@
 			 	   marg_estTab_CVR$N <- N
 			 	  colnames(marg_estTab_CVR)[1] <- c("effect")
 
-
-
 # 6. Publication Bias
 #----------------------------------------------------------------------------#
     # Eggers regression for lnRR. Modified version. Residuals should remove non-independence from multi-level model.
@@ -653,26 +659,7 @@
 # 7. Figures
 #----------------------------------------------------------------------------#
 	# Do some plotting. Funnel plots
-	pdf(height = 4.519824, width = 9.938326, file = "./pols_sex/output/figures/figure3_r1.pdf")
-			par(mfrow = c(1,2), mar = c(4, 5, 1, 1))
-			
-			#lnCVR
-	   		funnel(metaResidRR, yaxis = "seinv", ylab = "Precision (1/SE)",xlab = "lnRR", pch = 21, digits = 0, las = 1, level = c(95, 99), back = "gray90")
-			abline(v = 0, col = "red")
-			mtext("A)", adj = -0.25, padj = 0.5)	
-		
-			#lnCVR
-			funnel(metaResidCRR, yaxis = "seinv", ylab = "", xlab = "lnCVR", pch = 21, digits = 0, las = 1, level = c(95, 99), back = "gray90")
-			abline(v = 0, col = "red")
-			mtext("B)", adj = -0.25, padj = 0.5)	
-	dev.off()		
-	
-	pdf(height = 7, width = 7, file = "./pols_sex/output/figures/figure1.pdf")
-		  	par(mar = c(1,1,1,1))
-		  	plot(phylo, cex = 0.85)  #type = "fan"
-	dev.off()
-
-	pdf(width = 12.678414, height = 5.506608, file = "./pols_sex/output/figures/Figure1_r1.pdf")
+    pdf(width = 12.678414, height = 5.506608, file = "./pols_sex/output/figures/Figure1_r1.pdf")
 			par(mfrow = c(1,2),  bty = "n", mar = c(5,10,2,1))
 
 			labels <- tolower(rownames(coefTabRR <- marg_estTab)) 
@@ -709,17 +696,7 @@
 			text("Females high V", x = +0.3, y = max(yRef)+2, cex = 1)
 	dev.off()
 
-	pdf(height = 7, width = 7, file = "./pols_sex/output/figures/FigureS1_r1.pdf")
-		# Check out mean-variance relationships in each sex
-			par(mar = c(5,5,1,1))
-			plot(log(Mean_M) ~ log(SD_M), ylab = "log(Mean)", xlab = "log(SD)", data = data, col = "blue", las = 1, cex = 1.5, cex.axis = 1.5, cex.lab = 1.5)
-			points(log(Mean_F) ~ log(SD_F),  data = data, col = "red", cex = 1.5)
-			points(y = c(8, 7), x = c(-2, -2), col = c("blue", "red"), cex = 1.5)
-			text(c("Males", "Females"), y = c(7.9, 6.9), x = c(-1.8, -1.8), adj = c(0,0))
-			box()	
-	dev.off()
-
-	pdf(width=6.907489, height = 5.859031, file = "./pols_sex/output/figures/pred.Fig_r1.pdf")
+	pdf(width=6.907489, height = 5.859031, file = "./pols_sex/output/figures/Figure2_r1.pdf")
 		par(bty = "n", mar = c(5,10,2,1))
 				predictions$yRef <- c(c(1:(0.5*(nrow(predictions)))), c(18:(nrow(predictions)+5)))
 				Labels <- as.character(interaction(predictions$category, predictions$mating))
@@ -735,9 +712,9 @@
 				text(x = 0, y = 14, "semelparous", font = 2)
 				mtext(side  = 2, Labels, at = predictions$yRef, las = 1, cex = 0.8)
 				abline(v=0, lty=2)
-	dev.off()			
+	dev.off()	
 
-	pdf(width=13.736111, height = 7.111111, file = "./pols_sex/output/figures/behavPhys_fig2_r1.pdf")
+    pdf(width=13.736111, height = 7.111111, file = "./pols_sex/output/figures/Figure3_r1.pdf")
 			par(mfrow = c(1,2), bty = "n", mar = c(5,9,1,10))
 
 			labels <- tolower(rownames(coefTabRR <- behav_lnRRTab)) 
@@ -788,7 +765,40 @@
 			text("Females Higher", font = 2, x = 0.5, y = labRef)
 			text("Males Higher", font = 2, x = -0.5, y = labRef)
 			mtext("B)", font=2, adj = -0.50, cex = 2, padj = 1)
-
 	dev.off()
+
+	pdf(height = 4.519824, width = 9.938326, file = "./pols_sex/output/figures/Figure4_r1.pdf")
+			par(mfrow = c(1,2), mar = c(4, 5, 1, 1))
+			
+			#lnCVR
+	   		funnel(metaResidRR, yaxis = "seinv", ylab = "Precision (1/SE)",xlab = "lnRR", pch = 21, digits = 0, las = 1, level = c(95, 99), back = "gray90")
+			abline(v = 0, col = "red")
+			mtext("A)", adj = -0.25, padj = 0.5)	
+		
+			#lnCVR
+			funnel(metaResidCRR, yaxis = "seinv", ylab = "", xlab = "lnCVR", pch = 21, digits = 0, las = 1, level = c(95, 99), back = "gray90")
+			abline(v = 0, col = "red")
+			mtext("B)", adj = -0.25, padj = 0.5)	
+	dev.off()		
+		
+	pdf(height = 7, width = 7, file = "./pols_sex/output/figures/FigureS1_r1.pdf")
+		# Check out mean-variance relationships in each sex
+			par(mar = c(5,5,1,1))
+			plot(log(Mean_M) ~ log(SD_M), ylab = "log(Mean)", xlab = "log(SD)", data = data, col = "blue", las = 1, cex = 1.5, cex.axis = 1.5, cex.lab = 1.5)
+			points(log(Mean_F) ~ log(SD_F),  data = data, col = "red", cex = 1.5)
+			points(y = c(8, 7), x = c(-2, -2), col = c("blue", "red"), cex = 1.5)
+			text(c("Males", "Females"), y = c(7.9, 6.9), x = c(-1.8, -1.8), adj = c(0,0))
+			box()	
+	dev.off()
+
+	pdf(height = 7, width = 7, file = "./pols_sex/output/figures/figureS2.pdf")
+		  	par(mar = c(1,1,1,1))
+		  	plot(phylo, cex = 0.85)  #type = "fan"
+	dev.off()
+
+
+			
+
+	
 
 	
