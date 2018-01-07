@@ -298,14 +298,15 @@
 
 			# Model predictions
 				# Cerate new data we would like to predict for. 
-					newDat.rmv <- expand.grid(list(unique(data$background1), unique(data$category),unique(data$mating), unique(data$breeding)), stringsAsFactors = TRUE)
-					colnames(newDat.rmv) <- c("background1", "category","mating", "breeding")
+					newDat.rmv <- expand.grid(list(unique(data$category),unique(data$background1), unique(data$mating), unique(data$breeding)), stringsAsFactors = TRUE)
+					colnames(newDat.rmv) <- c("category","background1", "mating",  "breeding")
 
 				# Create model matrix
 					X <- model.matrix(~category + background1 + mating + breeding, data = newDat.rmv)
 
 				# Generate point estimate predictions and 95% confidence intervals
-					newDat.rmv$pred <- X %*% coefficients(modnameRR)
+					newDat.rmv$pred <- as.vector((X %*% coefficients(modnameRR))[,1])
+					newDat.rmv <- data.frame(newDat.rmv)
 					V = vcov(modnameRR)
 					se2 <- rowSums((X %*% V) * X)
 
@@ -313,7 +314,8 @@
 					newDat.rmv$CI_L <- newDat.rmv$pred + (-alpha*sqrt(se2))
 					newDat.rmv$CI_U <- newDat.rmv$pred + (alpha*sqrt(se2))
 
-					predictions <- newDat.rmv[newDat.rmv$background1 == "wild", ]
+					predictions <- newDat.rmv[newDat.rmv$breeding == "iteroparous", ]
+					predictions <- arrange(predictions, background1)
 
 
 		# MCMCglmm
@@ -424,7 +426,6 @@
 			behav$obs <- 1:dim(behav)[1]
 			behav$behavioural.categories<- ifelse(behav$behavioural.categories == "dispersal", "activity", behav$behavioural.categories)
 			behav$behavioural.categories <- as.factor(behav$behavioural.categories)
-			behav$lnRR_2 <- ifelse(behav$direct == "high", behav$lnRR*(-1), behav$lnRR)
 
 			VmatRR_behav <- VmCorMat(behav, "obs", "Dependency.behaviour")
 			rownames(VmatRR_behav) <- colnames(VmatRR_behav) <- behav$obs
@@ -434,7 +435,7 @@
 			# Model assuming independence
 			mod_lnRR_behav <- rma.mv(lnRR_2 ~ behavioural.categories, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), data = behav) 
 
-			write.csv(round_df(data.frame(Est. = mod_lnRR_behav$b, LCI = mod_lnRR_behav$ci.lb, LCI = mod_lnRR_behav$ci.ub), digits =3), file = "behavModCoefs_r1.csv")
+			write.csv(round_df(data.frame(Est. = mod_lnRR_behav$b, LCI = mod_lnRR_behav$ci.lb, LCI = mod_lnRR_behav$ci.ub), digits =3), file = "behavModCoefs_r1_new.csv")
 			
 			mod_lnRR_behavSS <- rma.mv(lnRR_2 ~ behavioural.categories, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(obs = VmatRR_behav), data = behav) 
 
@@ -448,7 +449,7 @@
 
 			prior = list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002), G2 =  list(V = 1, nu = 0.002), G3 = list(V = 1, fix = 1))) 
 
-			mod_lnRR_behav_mcmc <- MCMCglmm(lnRR ~ behavioural.categories, random = ~study + spp_rotl + esID, ginverse = list(spp_rotl = Ainv, esID = Vmat_behav), data = behav, prior = prior, nitt = 500000, thin = 100, pr = FALSE, family = "gaussian", verbose = FALSE)
+			mod_lnRR_behav_mcmc <- MCMCglmm(lnRR_2 ~ behavioural.categories, random = ~study + spp_rotl + esID, ginverse = list(spp_rotl = Ainv, esID = Vmat_behav), data = behav, prior = prior, nitt = 500000, thin = 100, pr = FALSE, family = "gaussian", verbose = FALSE)
 			summary(mod_lnRR_behav_mcmc) 
 
 			# Mean estimates in each level
@@ -473,9 +474,9 @@
 			phys$physiological.category <- as.factor(phys$physiological.category)
 
 			# Model assuming independence
-			mod_lnRR_phys <- rma.mv(lnRR ~ physiological.category, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(spp_rotl = phylo_cor), data = phys)
+			mod_lnRR_phys <- rma.mv(lnRR_2 ~ physiological.category, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(spp_rotl = phylo_cor), data = phys)
 
-			write.csv(round_df(data.frame(Est. = mod_lnRR_phys$b, LCI = mod_lnRR_phys$ci.lb, LCI = mod_lnRR_phys$ci.ub), digits =3), file = "physModCoefs_r1.csv")
+			write.csv(round_df(data.frame(Est. = mod_lnRR_phys$b, LCI = mod_lnRR_phys$ci.lb, LCI = mod_lnRR_phys$ci.ub), digits =3), file = "physModCoefs_r1_new.csv")
 
 		#MCMCglmm
 			phys$esID <- 1:dim(phys)[1]
@@ -484,7 +485,7 @@
 
 			prior = list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002), G2 =  list(V = 1, nu = 0.002), G3 = list(V = 1, fix = 1))) 
 
-			mod_lnRR_phys_mcmc <- MCMCglmm(lnRR ~ physiological.category, random = ~study + spp_rotl + esID, ginverse = list(spp_rotl = Ainv, esID = Vmat_phys), data = phys, prior = prior, nitt = 500000, thin = 100, pr = FALSE, family = "gaussian", verbose = FALSE)
+			mod_lnRR_phys_mcmc <- MCMCglmm(lnRR_2 ~ physiological.category, random = ~study + spp_rotl + esID, ginverse = list(spp_rotl = Ainv, esID = Vmat_phys), data = phys, prior = prior, nitt = 500000, thin = 100, pr = FALSE, family = "gaussian", verbose = FALSE)
 			summary(mod_lnRR_phys_mcmc) 
 
 			# Mean estimates in each level
@@ -701,20 +702,20 @@
 				predictions$yRef <- c(c(1:(0.5*(nrow(predictions)))), c(18:(nrow(predictions)+5)))
 				Labels <- as.character(interaction(predictions$category, predictions$mating))
 				#lnRR
-				plot(yRef~pred,  type = "n", xlim = c(-0.5, 0.5), ylim = c(0, max(yRef)+2), xlab = "Predicted lnRR", ylab = "", data = predictions, yaxt='n', cex.lab = 1.5)
+				plot(yRef~pred,  type = "n", xlim = c(-0.7, 0.7), ylim = c(0, max(yRef)+2), xlab = "Predicted lnRR", ylab = "", data = predictions, yaxt='n', cex.lab = 1.5)
 				abline(v = 0, lty = 2, col = "gray90")
 				
 				points(predictions$yRef~predictions[, "pred"], pch = 16) #-30 from other table
 				arrows(x0=predictions[,"pred"] , y0= predictions$yRef, x1= predictions[,"CI_L"] , y1 = predictions$yRef, length = 0, angle = 90)
 				arrows(x0=predictions[,"pred"] , y0= predictions$yRef, x1= predictions[,"CI_U"] , y1 = predictions$yRef, length = 0, angle = 90)
 
-				text(x = 0, y = 30, "iteroparous", font = 2)
-				text(x = 0, y = 14, "semelparous", font = 2)
+				text(x = 0, y = 30, "Wild", font = 2)
+				text(x = 0, y = 14, "Lab", font = 2)
 				mtext(side  = 2, Labels, at = predictions$yRef, las = 1, cex = 0.8)
 				abline(v=0, lty=2)
 	dev.off()	
 
-    pdf(width=13.736111, height = 7.111111, file = "./pols_sex/output/figures/Figure3_r1.pdf")
+    pdf(width=13.736111, height = 7.111111, file = "./pols_sex/output/figures/Figure3_r1_new.pdf")
 			par(mfrow = c(1,2), bty = "n", mar = c(5,9,1,10))
 
 			labels <- tolower(rownames(coefTabRR <- behav_lnRRTab)) 
@@ -730,15 +731,15 @@
 			mtext(side  = 2, labels, at = yRef, las = 1)
 			
 			labRef <- c(7.5) #labRef <- c(5,9,13,20,25,31,37,42,46)
-			titles <- c("Behavioural Trait Type")
+			titles <- c("Behavioral Trait Type")
 			mtext(side  = 2, titles, font = 2, at = labRef, las = 1, cex = 1)
 			mtext(side  = 4, coefTabRR$N, at = yRef, las = 1, adj = .5, line = 1)
 			mtext(side = 4, expression(bold("N")), at = max(yRef)+0.5, las = 1, line = 0.5, cex = 1.2)
 			mtext(side  = 4, round(coefTabRR$effect, digits = 2), at = yRef, las = 1, adj = .5, line = 3)
 			mtext(side  = 4, paste0("[", round(coefTabRR$lower, digits =2),",", round(coefTabRR$upper, digits = 2), "]"), at = yRef, las = 1, adj = .5, line = 6.5)
 			mtext(side = 4, expression(bold("Est. [95% CI]")), at = labRef, las = 1, line = 3, cex = 1.2)
-			text("Females Higher", font = 2, x = 0.5, y = labRef)
-			text("Males Higher", font = 2, x = -0.5, y = labRef)
+			text("Females Faster", font = 2, x = 0.5, y = labRef)
+			text("Males Faster", font = 2, x = -0.5, y = labRef)
 			mtext("A)", font=2, adj = -0.50, cex = 2, padj = 1)
 			par(bty = "n", mar = c(5,9,1,10))
 
@@ -762,8 +763,8 @@
 			mtext(side  = 4, round(coefTabRR$effect, digits = 2), at = yRef, las = 1, adj = .5, line = 3)
 			mtext(side  = 4, paste0("[", round(coefTabRR$lower, digits =2),",", round(coefTabRR$upper, digits = 2), "]"), at = yRef, las = 1, adj = .5, line = 6.5)
 			mtext(side = 4, expression(bold("Est. [95% CI]")), at = labRef, las = 1, line = 3, cex = 1.2)
-			text("Females Higher", font = 2, x = 0.5, y = labRef)
-			text("Males Higher", font = 2, x = -0.5, y = labRef)
+			text("Females Faster", font = 2, x = 0.5, y = labRef)
+			text("Males Faster", font = 2, x = -0.5, y = labRef)
 			mtext("B)", font=2, adj = -0.50, cex = 2, padj = 1)
 	dev.off()
 
