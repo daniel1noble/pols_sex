@@ -309,14 +309,21 @@ VmCovMat <- function(data, es_var, depend, cor = 0.5){
 
 es_var = "obs"   
 
-depend = "Dependency.individual.level"   
+depend = "Dependency.temporal.level"   
 # Note for this function to work replace es_var with "obs" and specify dependency variable as normal.
 VmCorMat <- function(data, es_var, depend, cor = 0.5){
     	data$dep<-paste(data[,"study"], data[,depend], sep="_")
 
     	tmp <- reshape::expand.grid.df(data.frame(row = data[, es_var], stdy1 = data[,"dep"]), data.frame(row = sqrt(data[, es_var]), stdy2 = data[,"dep"]))
 
-    	tmp$cor <- ifelse((tmp$stdy1 == tmp$stdy2), cor, 0)
+    	zero_stdy1 <- as.numeric(gsub(".*_", "", tmp$stdy1))
+    	zero_stdy2 <- as.numeric(gsub(".*_", "", tmp$stdy2))
+
+    	lessThanzero <- rowSums(data.frame(zero_stdy1, zero_stdy2))
+
+    	tmp$cor1 <- ifelse((tmp$stdy1 == tmp$stdy2), cor, 0)
+    	 tmp$cor <- ifelse((lessThanzero == 0), 0, tmp$cor1)
+
 	  	corMat <- matrix(tmp$cor , nrow = nrow(data), ncol = nrow(data))
 	  	diag(corMat) <- 1
   	

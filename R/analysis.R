@@ -194,9 +194,17 @@
 		   # Within study correlation matrix between effects sharing the same individuals
 		   VmatRR <- VmCorMat(data, "obs", "Dependency.individual.level")
 		   rownames(VmatRR) <- colnames(VmatRR) <- data$obs
-		   corrplot(as.matrix(VmatRR), tl.col = "black", tl.cex = 0.8, is.corr = FALSE, type = "lower", method = "color")	
+		   corrplot(as.matrix(VmatRR), tl.col = "black", tl.cex = 0.8, is.corr = FALSE, type = "lower", method = "color")
 
 			modRR_intSS <- rma.mv(lnRR_2 ~ 1, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(spp_rotl = phylo_cor, obs = VmatRR), data = data)	 
+
+		   # Temporal dependency
+		   VmatRR_temp <- VmCorMat(data, "obs", "Dependency.temporal.level")
+		   rownames(VmatRR_temp) <- colnames(VmatRR_temp) <- data$obs
+		   corrplot(as.matrix(VmatRR_temp), tl.col = "black", tl.cex = 0.8, is.corr = FALSE, type = "lower", method = "color")	
+		   write.csv(VmatRR_temp, file ="temporal.csv")
+
+			modRR_intSS_2 <- rma.mv(lnRR_2 ~ 1, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(spp_rotl = phylo_cor, obs = VmatRR_temp), data = data)	 
 		  
 	  #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
 	   		I2(modRR_int, v = data$v.lnRR, phylo = "spp_rotl")
@@ -238,6 +246,9 @@
 	   		rownames(VmatCVR) <- colnames(VmatCVR) <- data$obs
 		    corrplot(as.matrix(VmatCVR), tl.col = "black", tl.cex = 0.8, is.corr = FALSE, type = "lower", method = "color")
 
+
+		    VmatCVR_temp <- VmCorMat(data, "obs", "Dependency.temporal.level")
+	   		rownames(VmatCVR_temp) <- colnames(VmatCVR_temp) <- data$obs
 	   #Generate heterogeneity measures and CI's. Note "species" is needed to do the correct calculations for phylogeny.
 	   I2(modCVR_int, v = data$VlnCVR, phylo = "spp_rotl")
 
@@ -289,12 +300,17 @@
 			
 
 			#Sensitivity Analysis. Covariance matrix.
+				# Individual level dependency
 				modnameRRDep <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = VmatRR, R = list(spp_rotl = phylo_cor, obs = VmatRR), random = list(~1|study, ~1|spp_rotl, ~1|obs), method = "REML", data = data)
 				AICc(modnameRRDep)
 				coefRRTable1B <- round_df(data.frame(Est. = modnameRRDep$b, LCI = modnameRRDep$ci.lb, LCI = modnameRRDep$ci.ub), digits =3)
 			
 				TableS1RR <- rbind(coefRRTable1A, coefRRTable1B)
 				write.csv(TableS1RR, "./pols_sex/output/tables/TableS1RRBreeding_r1.csv")
+
+				# Temporal dependency
+				modnameRRDep_temp <- rma.mv(lnRR_2 ~ category + background1 + mating + breeding, V = VmatRR, R = list(spp_rotl = phylo_cor, obs = VmatRR_temp), random = list(~1|study, ~1|spp_rotl, ~1|obs), method = "REML", data = data)
+				AICc(modnameRRDep)
 
 			# Model predictions
 				# Cerate new data we would like to predict for. 
@@ -517,6 +533,10 @@
 			TableS1CVR <- rbind(coefCVRTable1A, coefCVRTable1B)
 			write.csv(TableS1CVR, "./pols_sex/output/tables/TableS1CVR_breed_r1.csv")
 
+			# Temporal-level dependency
+			modnameCVRDep_temp <- rma.mv(lnCVR_es ~ category + background1 + mating + breeding, V = VlnCVR, R = list(spp_rotl = phylo_cor, obs = VmatCVR_temp), random = list(~1|study, ~1|spp_rotl, ~1|obs), method = "REML", data = data)
+			AICc(modnameCVRDep)
+			
 		#MCMCglmm
 
 			prior = list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002), G2 =  list(V = 1, nu = 0.002), G3 = list(V = 1, fix = 1))) 
