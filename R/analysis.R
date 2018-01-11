@@ -431,6 +431,7 @@
 			 	  marg_estTab$obs <- 1:nrow(marg_estTab)
 			 	  marg_estTab$N <- N
 			 	  colnames(marg_estTab)[1] <- c("effect")
+			 	  rownames(marg_estTab)[c(2,3)] <- c("developmental life-history", "adult life-history")
 
 			 	  # Calculate the percent increase of the sex with larger trait values
 			 	  marg_estTab$per <- exp(marg_estTab$effect)
@@ -451,6 +452,8 @@
 			# Model assuming independence
 			mod_lnRR_behav <- rma.mv(lnRR_2 ~ behavioural.categories, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), data = behav) 
 
+			mod_lnCVR_behav <- rma.mv(lnCVR_es ~ behavioural.categories, V = VlnCVR, random = list(~1|study, ~1|spp_rotl, ~1|obs), data = behav) 
+
 			write.csv(round_df(data.frame(Est. = mod_lnRR_behav$b, LCI = mod_lnRR_behav$ci.lb, LCI = mod_lnRR_behav$ci.ub), digits =3), file = "behavModCoefs_r1_new.csv")
 			
 			mod_lnRR_behavSS <- rma.mv(lnRR_2 ~ behavioural.categories, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(obs = VmatRR_behav), data = behav) 
@@ -463,10 +466,17 @@
 			Vmat_behav <- as(solve(diag(behav$v.lnRR)), "dgCMatrix")
 			colnames(Vmat_behav) <- rownames(Vmat_behav) <- behav$esID
 
+			Vmat_CVR_behav <- as(solve(diag(behav$VlnCVR)), "dgCMatrix")
+			colnames(Vmat_CVR_behav) <- rownames(Vmat_CVR_behav) <- behav$esID
+
 			prior = list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002), G2 =  list(V = 1, nu = 0.002), G3 = list(V = 1, fix = 1))) 
 
 			mod_lnRR_behav_mcmc <- MCMCglmm(lnRR_2 ~ behavioural.categories, random = ~study + spp_rotl + esID, ginverse = list(spp_rotl = Ainv, esID = Vmat_behav), data = behav, prior = prior, nitt = 500000, thin = 100, pr = FALSE, family = "gaussian", verbose = FALSE)
 			summary(mod_lnRR_behav_mcmc) 
+
+
+			mod_lnCVR_behav_mcmc <- MCMCglmm(lnCVR_es ~ behavioural.categories, random = ~study + spp_rotl + esID, ginverse = list(spp_rotl = Ainv, esID = Vmat_CVR_behav), data = behav, prior = prior, nitt = 500000, thin = 100, pr = FALSE, family = "gaussian", verbose = FALSE)
+			summary(mod_lnCVR_behav_mcmc) 
 
 			# Mean estimates in each level
 				lnRR_behav_Sol <- mod_lnRR_behav_mcmc$Sol
@@ -484,6 +494,23 @@
 			behav_lnRRTab$obs <- 1:nrow(behav_lnRRTab)
 			behav_lnRRTab$N <- table(behav$behavioural.categories)
 
+
+				#lnCVR
+				lnCVR_behav_Sol <- mod_lnCVR_behav_mcmc$Sol
+
+				activity_behav_CVR <- lnCVR_behav_Sol[,"(Intercept)"]
+				aggression_behav_CVR <- activity_behav_CVR + lnCVR_behav_Sol[,"behavioural.categoriesaggression"]
+				bold_behav_CVR <- activity_behav_CVR + lnCVR_behav_Sol[,"behavioural.categoriesboldness"]
+				exlore_behav_CVR <- activity_behav_CVR + lnCVR_behav_Sol[,"behavioural.categoriesexploration"]
+				parent_behav_CVR <- activity_behav_CVR + lnCVR_behav_Sol[,"behavioural.categoriesparenting"]
+				stressCope_behav_CVR <- activity_behav_CVR + lnCVR_behav_Sol[,"behavioural.categoriesstress-coping"]
+
+			behav_lnCVRTab <- as.data.frame(rbind(c(mean(activity_behav_CVR), HPDinterval(activity_behav_CVR)), c(mean(aggression_behav_CVR), HPDinterval(aggression_behav_CVR)), c(mean(bold_behav_CVR), HPDinterval(bold_behav_CVR)), c(mean(exlore_behav_CVR), HPDinterval(exlore_behav_CVR)), c(mean(parent_behav_CVR), HPDinterval(parent_behav_CVR)), c(mean(stressCope_behav_CVR), HPDinterval(stressCope_behav_CVR))))
+			rownames(behav_lnCVRTab) <- c("activity", "aggression", "boldness", "exploration", "parenting", "stress-coping")
+			colnames(behav_lnCVRTab) <- c("effect", "lower", "upper")
+			behav_lnCVRTab$obs <- 1:nrow(behav_lnCVRTab)
+			behav_lnCVRTab$N <- table(behav$behavioural.categories)
+
 		#PHYSIOLOGICAL TRAITS
 			phys <- subset(data, category == "physiology")
 			phys$obs <- 1:dim(phys)[1]
@@ -499,12 +526,19 @@
 			Vmat_phys <- as(solve(diag(phys$v.lnRR)), "dgCMatrix")
 			colnames(Vmat_phys) <- rownames(Vmat_phys) <- phys$esID
 
+			Vmat_CVR_phys <- as(solve(diag(phys$VlnCVR)), "dgCMatrix")
+			colnames(Vmat_CVR_phys) <- rownames(Vmat_CVR_phys) <- phys$esID
+
 			prior = list(R = list(V = 1, nu = 0.002), G = list(G1 = list(V = 1, nu = 0.002), G2 =  list(V = 1, nu = 0.002), G3 = list(V = 1, fix = 1))) 
 
 			mod_lnRR_phys_mcmc <- MCMCglmm(lnRR_2 ~ physiological.category, random = ~study + spp_rotl + esID, ginverse = list(spp_rotl = Ainv, esID = Vmat_phys), data = phys, prior = prior, nitt = 500000, thin = 100, pr = FALSE, family = "gaussian", verbose = FALSE)
 			summary(mod_lnRR_phys_mcmc) 
 
+			mod_lnCVR_phys_mcmc <- MCMCglmm(lnCVR_es ~ physiological.category, random = ~study + spp_rotl + esID, ginverse = list(spp_rotl = Ainv, esID = Vmat_CVR_phys), data = phys, prior = prior, nitt = 500000, thin = 100, pr = FALSE, family = "gaussian", verbose = FALSE)
+			summary(mod_lnCVR_phys_mcmc) 
+
 			# Mean estimates in each level
+				#lnRR
 				lnRR_phys_Sol <- mod_lnRR_phys_mcmc$Sol
 
 				baseline_phys <- lnRR_phys_Sol[,"(Intercept)"]
@@ -517,6 +551,22 @@
 			colnames(phys_lnRRTab) <- c("effect", "lower", "upper")
 			phys_lnRRTab$obs <- 1:nrow(phys_lnRRTab)
 			phys_lnRRTab$N <- table(phys$physiological.category)
+
+				#lnCVR
+				lnCVR_phys_Sol <- mod_lnCVR_phys_mcmc$Sol
+
+				baseline_phys_CVR <- lnCVR_phys_Sol[,"(Intercept)"]
+				immune_phys_CVR <- baseline_phys_CVR + lnCVR_phys_Sol[,"physiological.categoryimmun"]
+				other_phys_CVR <- baseline_phys_CVR + lnCVR_phys_Sol[,"physiological.categoryother"]
+				stressed_phys_CVR <- baseline_phys_CVR + lnCVR_phys_Sol[,"physiological.categorystressed"]
+
+			phys_lnCVRTab <- as.data.frame(rbind(c(mean(baseline_phys_CVR), HPDinterval(baseline_phys_CVR)), c(mean(immune_phys_CVR), HPDinterval(immune_phys_CVR)), c(mean(other_phys_CVR), HPDinterval(other_phys_CVR)), c(mean(stressed_phys_CVR), HPDinterval(stressed_phys_CVR))))
+			rownames(phys_lnCVRTab) <- c("baseline", "immune", "other", "stressed")
+			colnames(phys_lnCVRTab) <- c("effect", "lower", "upper")
+			phys_lnCVRTab$obs <- 1:nrow(phys_lnCVRTab)
+			phys_lnCVRTab$N <- table(phys$physiological.category)
+
+
 
 	#lnCVR
 	
@@ -625,6 +675,7 @@
 			 	  marg_estTab_CVR$obs <- 1:nrow(marg_estTab_CVR)
 			 	   marg_estTab_CVR$N <- N
 			 	  colnames(marg_estTab_CVR)[1] <- c("effect")
+			 	  rownames(marg_estTab_CVR)[c(2,3)] <- c("developmental life-history", "adult life-history")
 
 # 6. Publication Bias
 #----------------------------------------------------------------------------#
@@ -735,63 +786,114 @@
 				abline(v=0, lty=2)
 	dev.off()	
 
-    pdf(width=13.736111, height = 7.111111, file = "./pols_sex/output/figures/Figure3_r1_new.pdf")
+    pdf(width=13.736111, height = 7.111111, file = "./pols_sex/output/figures/Figure3_r1_new10Jan.pdf")
 			par(mfrow = c(1,2), bty = "n", mar = c(5,9,1,10))
 
-			labels <- tolower(rownames(coefTabRR <- behav_lnRRTab)) 
+			labels <- tolower(rownames(coefTabRR)) 
 			yRef <- c(1:6)
 			
-			#lnRR
-			plot(obs~effect,  type = "n", xlim = c(-1, 1), ylim = c(0, max(yRef)+2), xlab = "lnRR", ylab = "", data = coefTabRR, yaxt='n', cex.lab = 1.5)
+			#lnRR Behav
+			plot(obs~effect,  type = "n", xlim = c(-1, 1), ylim = c(0, max(yRef)+2), xlab = "lnRR", ylab = "", data = behav_lnRRTab, yaxt='n', cex.lab = 1.5)
 			abline(v = 0, lty = 2)
 			
-			points(yRef~coefTabRR[, "effect"], pch = 16) #-30 from other table
-			arrows(x0=coefTabRR[,"effect"] , y0= yRef, x1= coefTabRR[,"lower"] , y1 = yRef, length = 0, angle = 90)
-			arrows(x0=coefTabRR[,"effect"] , y0= yRef, x1= coefTabRR[,"upper"] , y1 = yRef, length = 0, angle = 90)
+			points(yRef~behav_lnRRTab[, "effect"], pch = 16) #-30 from other table
+			arrows(x0=behav_lnRRTab[,"effect"] , y0= yRef, x1= behav_lnRRTab[,"lower"] , y1 = yRef, length = 0, angle = 90)
+			arrows(x0=behav_lnRRTab[,"effect"] , y0= yRef, x1= behav_lnRRTab[,"upper"] , y1 = yRef, length = 0, angle = 90)
 			mtext(side  = 2, labels, at = yRef, las = 1)
 			
 			labRef <- c(7.5) #labRef <- c(5,9,13,20,25,31,37,42,46)
 			titles <- c("Behavioral Trait Type")
 			mtext(side  = 2, titles, font = 2, at = labRef, las = 1, cex = 1)
-			mtext(side  = 4, coefTabRR$N, at = yRef, las = 1, adj = .5, line = 1)
+			mtext(side  = 4, behav_lnRRTab$N, at = yRef, las = 1, adj = .5, line = 1)
 			mtext(side = 4, expression(bold("N")), at = max(yRef)+0.5, las = 1, line = 0.5, cex = 1.2)
-			mtext(side  = 4, round(coefTabRR$effect, digits = 2), at = yRef, las = 1, adj = .5, line = 3)
-			mtext(side  = 4, paste0("[", round(coefTabRR$lower, digits =2),",", round(coefTabRR$upper, digits = 2), "]"), at = yRef, las = 1, adj = .5, line = 6.5)
+			mtext(side  = 4, round(behav_lnRRTab$effect, digits = 2), at = yRef, las = 1, adj = .5, line = 3)
+			mtext(side  = 4, paste0("[", round(behav_lnRRTab$lower, digits =2),",", round(behav_lnRRTab$upper, digits = 2), "]"), at = yRef, las = 1, adj = .5, line = 6.5)
 			mtext(side = 4, expression(bold("Est. [95% CI]")), at = labRef, las = 1, line = 3, cex = 1.2)
 			text("Females Faster", font = 2, x = 0.5, y = labRef)
 			text("Males Faster", font = 2, x = -0.5, y = labRef)
 			mtext("A)", font=2, adj = -0.50, cex = 2, padj = 1)
 			par(bty = "n", mar = c(5,9,1,10))
 
-			labels <- tolower(rownames(coefTabRR <- phys_lnRRTab)) 
-			yRef <- c(1:4)
 			
-			#lnRR
-			plot(obs~effect,  type = "n", xlim = c(-1, 1), ylim = c(0, max(yRef)+1), xlab = "lnRR", ylab = "", data = coefTabRR, yaxt='n', cex.lab = 1.5)
+			#lnCVR behav
+			labels <- tolower(rownames(behav_lnCVRTab)) 
+			yRef <- c(1:6)
+			plot(obs~effect,  type = "n", xlim = c(-1, 1), ylim = c(0, max(yRef)+2), xlab = "lnCVR", ylab = "", data = behav_lnCVRTab, yaxt='n', cex.lab = 1.5)
 			abline(v = 0, lty = 2)
 			
-			points(yRef~coefTabRR[, "effect"], pch = 16) #-30 from other table
-			arrows(x0=coefTabRR[,"effect"] , y0= yRef, x1= coefTabRR[,"lower"] , y1 = yRef, length = 0, angle = 90)
-			arrows(x0=coefTabRR[,"effect"] , y0= yRef, x1= coefTabRR[,"upper"] , y1 = yRef, length = 0, angle = 90)
+			points(yRef~behav_lnCVRTab[, "effect"], pch = 16) #-30 from other table
+			arrows(x0=behav_lnCVRTab[,"effect"] , y0= yRef, x1= behav_lnCVRTab[,"lower"] , y1 = yRef, length = 0, angle = 90)
+			arrows(x0=behav_lnCVRTab[,"effect"] , y0= yRef, x1= behav_lnCVRTab[,"upper"] , y1 = yRef, length = 0, angle = 90)
+			mtext(side  = 2, labels, at = yRef, las = 1)
+			
+			labRef <- c(7.5) #labRef <- c(5,9,13,20,25,31,37,42,46)
+			titles <- c("Behavioral Trait Type")
+			mtext(side  = 2, titles, font = 2, at = labRef, las = 1, cex = 1)
+			mtext(side  = 4, behav_lnCVRTab$N, at = yRef, las = 1, adj = .5, line = 1)
+			mtext(side = 4, expression(bold("N")), at = max(yRef)+0.5, las = 1, line = 0.5, cex = 1.2)
+			mtext(side  = 4, round(behav_lnCVRTab$effect, digits = 2), at = yRef, las = 1, adj = .5, line = 3)
+			mtext(side  = 4, paste0("[", round(behav_lnCVRTab$lower, digits =2),",", round(behav_lnCVRTab$upper, digits = 2), "]"), at = yRef, las = 1, adj = .5, line = 6.5)
+			mtext(side = 4, expression(bold("Est. [95% CI]")), at = labRef, las = 1, line = 3, cex = 1.2)
+			text("> Female Variance", font = 2, x = 0.5, y = labRef)
+			text("> Male Variance", font = 2, x = -0.5, y = labRef)
+			mtext("B)", font=2, adj = -0.50, cex = 2, padj = 1)
+			par(bty = "n", mar = c(5,9,1,10))
+
+	dev.off()
+
+pdf(width=13.736111, height = 7.111111, file = "./pols_sex/output/figures/FigureX_r1_new10Jan_Phys.pdf")
+			par(mfrow = c(1,2), bty = "n", mar = c(5,9,1,10))
+
+			labels <- tolower(rownames(phys_lnRRTab)) 
+			yRef <- c(1:4)
+			plot(obs~effect,  type = "n", xlim = c(-1, 1), ylim = c(0, max(yRef)+1), xlab = "lnRR", ylab = "", data = phys_lnRRTab, yaxt='n', cex.lab = 1.5)
+			abline(v = 0, lty = 2)
+			
+			points(yRef~phys_lnRRTab[, "effect"], pch = 16) #-30 from other table
+			arrows(x0=phys_lnRRTab[,"effect"] , y0= yRef, x1= phys_lnRRTab[,"lower"] , y1 = yRef, length = 0, angle = 90)
+			arrows(x0=phys_lnRRTab[,"effect"] , y0= yRef, x1= phys_lnRRTab[,"upper"] , y1 = yRef, length = 0, angle = 90)
 			mtext(side  = 2, labels, at = yRef, las = 1)
 			
 			labRef <- c(4.7) #labRef <- c(5,9,13,20,25,31,37,42,46)
 			titles <- c("Physiological Measure")
 			mtext(side  = 2, titles, font = 2, at = labRef, las = 1, cex = 1)
-			mtext(side  = 4, coefTabRR$N, at = yRef, las = 1, adj = .5, line = 1)
+			mtext(side  = 4, phys_lnRRTab$N, at = yRef, las = 1, adj = .5, line = 1)
 			mtext(side = 4, expression(bold("N")), at = max(yRef)+0.5, las = 1, line = 0.5, cex = 1.2)
-			mtext(side  = 4, round(coefTabRR$effect, digits = 2), at = yRef, las = 1, adj = .5, line = 3)
-			mtext(side  = 4, paste0("[", round(coefTabRR$lower, digits =2),",", round(coefTabRR$upper, digits = 2), "]"), at = yRef, las = 1, adj = .5, line = 6.5)
+			mtext(side  = 4, round(phys_lnRRTab$effect, digits = 2), at = yRef, las = 1, adj = .5, line = 3)
+			mtext(side  = 4, paste0("[", round(phys_lnRRTab$lower, digits =2),",", round(phys_lnRRTab$upper, digits = 2), "]"), at = yRef, las = 1, adj = .5, line = 6.5)
 			mtext(side = 4, expression(bold("Est. [95% CI]")), at = labRef, las = 1, line = 3, cex = 1.2)
 			text("Females Faster", font = 2, x = 0.5, y = labRef)
 			text("Males Faster", font = 2, x = -0.5, y = labRef)
+			mtext("A)", font=2, adj = -0.50, cex = 2, padj = 1)
+
+			labels <- tolower(rownames(phys_lnCVRTab)) 
+			yRef <- c(1:4)
+			plot(obs~effect,  type = "n", xlim = c(-1, 1), ylim = c(0, max(yRef)+1), xlab = "lnCVR", ylab = "", data = phys_lnCVRTab, yaxt='n', cex.lab = 1.5)
+			abline(v = 0, lty = 2)
+			
+			points(yRef~phys_lnCVRTab[, "effect"], pch = 16) #-30 from other table
+			arrows(x0=phys_lnCVRTab[,"effect"] , y0= yRef, x1= phys_lnCVRTab[,"lower"] , y1 = yRef, length = 0, angle = 90)
+			arrows(x0=phys_lnCVRTab[,"effect"] , y0= yRef, x1= phys_lnCVRTab[,"upper"] , y1 = yRef, length = 0, angle = 90)
+			mtext(side  = 2, labels, at = yRef, las = 1)
+			
+			labRef <- c(4.7) #labRef <- c(5,9,13,20,25,31,37,42,46)
+			titles <- c("Physiological Measure")
+			mtext(side  = 2, titles, font = 2, at = labRef, las = 1, cex = 1)
+			mtext(side  = 4, phys_lnCVRTab$N, at = yRef, las = 1, adj = .5, line = 1)
+			mtext(side = 4, expression(bold("N")), at = max(yRef)+0.5, las = 1, line = 0.5, cex = 1.2)
+			mtext(side  = 4, round(phys_lnCVRTab$effect, digits = 2), at = yRef, las = 1, adj = .5, line = 3)
+			mtext(side  = 4, paste0("[", round(phys_lnCVRTab$lower, digits =2),",", round(phys_lnCVRTab$upper, digits = 2), "]"), at = yRef, las = 1, adj = .5, line = 6.5)
+			mtext(side = 4, expression(bold("Est. [95% CI]")), at = labRef, las = 1, line = 3, cex = 1.2)
+			text("> Females Variance", font = 2, x = 0.5, y = labRef)
+			text("> Male Variance", font = 2, x = -0.5, y = labRef)
 			mtext("B)", font=2, adj = -0.50, cex = 2, padj = 1)
+			
 	dev.off()
 
 	pdf(height = 4.519824, width = 9.938326, file = "./pols_sex/output/figures/Figure4_r1.pdf")
 			par(mfrow = c(1,2), mar = c(4, 5, 1, 1))
 			
-			#lnCVR
+			#lnCRR
 	   		funnel(metaResidRR, yaxis = "seinv", ylab = "Precision (1/SE)",xlab = "lnRR", pch = 21, digits = 0, las = 1, level = c(95, 99), back = "gray90")
 			abline(v = 0, col = "red")
 			mtext("A)", adj = -0.25, padj = 0.5)	
