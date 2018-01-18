@@ -454,7 +454,7 @@
 
 			mod_lnCVR_behav <- rma.mv(lnCVR_es ~ behavioural.categories, V = VlnCVR, random = list(~1|study, ~1|spp_rotl, ~1|obs), data = behav) 
 
-			write.csv(round_df(data.frame(Est. = mod_lnRR_behav$b, LCI = mod_lnRR_behav$ci.lb, LCI = mod_lnRR_behav$ci.ub), digits =3), file = "behavModCoefs_r1_new.csv")
+			write.csv(round_df(data.frame(Est.RR = mod_lnRR_behav$b, LCIRR = mod_lnRR_behav$ci.lb, UCIRR = mod_lnRR_behav$ci.ub, Est.CVR = mod_lnCVR_behav$b, LCICVR = mod_lnCVR_behav$ci.lb, UCICVR=mod_lnCVR_behav$ci.ub), digits =3), file = "behavModCoefs_r1_new_fin.csv")
 			
 			mod_lnRR_behavSS <- rma.mv(lnRR_2 ~ behavioural.categories, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(obs = VmatRR_behav), data = behav) 
 
@@ -519,7 +519,9 @@
 			# Model assuming independence
 			mod_lnRR_phys <- rma.mv(lnRR_2 ~ physiological.category, V = v.lnRR, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(spp_rotl = phylo_cor), data = phys)
 
-			write.csv(round_df(data.frame(Est. = mod_lnRR_phys$b, LCI = mod_lnRR_phys$ci.lb, LCI = mod_lnRR_phys$ci.ub), digits =3), file = "physModCoefs_r1_new.csv")
+			mod_lnCVR_phys <- rma.mv(lnCVR_es ~ physiological.category, V = VlnCVR, random = list(~1|study, ~1|spp_rotl, ~1|obs), R = list(spp_rotl = phylo_cor), data = phys)
+
+			write.csv(round_df(data.frame(Est.RR = mod_lnRR_phys$b, LCIRR = mod_lnRR_phys$ci.lb, UCIRR = mod_lnRR_phys$ci.ub, Est.CVR = mod_lnCVR_phys$b, LCICVR = mod_lnCVR_phys$ci.lb, UCICVR = mod_lnCVR_phys$ci.ub), digits =3), file = "physModCoefs_r1_new.csv")
 
 		#MCMCglmm
 			phys$esID <- 1:dim(phys)[1]
